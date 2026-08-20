@@ -10,6 +10,11 @@ const emptyState = document.getElementById('empty-state');
 const clearDataBtn = document.getElementById('clear-data-btn');
 const profileSelect = document.getElementById('profile-select');
 const addProfileBtn = document.getElementById('add-profile-btn');
+const cancelEditBtn = document.getElementById('cancel-edit-btn');
+const submitBtn = document.getElementById('submit-btn');
+
+let editingId = null;
+let chartInstance = null;
 
 // Stats Elements
 const statAvgEconomy = document.getElementById('stat-avg-economy');
@@ -131,6 +136,86 @@ addProfileBtn.addEventListener('click', () => {
     }
 });
 
+// Cancel Edit
+cancelEditBtn.addEventListener('click', () => {
+    editingId = null;
+    form.reset();
+    dateInput.valueAsDate = new Date();
+    calculatedTotal.textContent = '₱0.00';
+    submitBtn.textContent = 'Save Record';
+    cancelEditBtn.classList.add('hidden');
+});
+
+// Edit Record
+window.editRecord = (id) => {
+    const record = records.find(r => r.id === id);
+    if (!record) return;
+    
+    editingId = id;
+    dateInput.value = record.date;
+    odometerInput.value = record.odometer;
+    litersInput.value = record.liters;
+    priceInput.value = record.pricePerLiter;
+    calculateFormTotal();
+    
+    submitBtn.textContent = 'Update Record';
+    cancelEditBtn.classList.remove('hidden');
+    
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+// Update Chart
+const updateChart = (processedData) => {
+    const ctx = document.getElementById('efficiencyChart');
+    if (!ctx) return;
+    
+    const chartData = processedData.filter(d => d.kmPerLiter !== null);
+    const labels = chartData.map(d => new Date(d.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+    const dataPoints = chartData.map(d => d.kmPerLiter);
+
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    
+    if (chartData.length === 0) return;
+
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Efficiency (km/L)',
+                data: dataPoints,
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointBackgroundColor: '#2563eb',
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) { return ' ' + context.parsed.y.toFixed(2) + ' km/L'; }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    title: { display: true, text: 'km/L' }
+                }
+            }
+        }
+    });
+};
+
 // Process records to calculate derived values
 const processRecords = (data) => {
     if (data.length === 0) return [];
@@ -228,6 +313,10 @@ const renderTable = () => {
         emptyState.classList.remove('hidden');
         document.querySelector('table').classList.add('hidden');
         updateStats([]);
+        if (chartInstance) {
+            chartInstance.destroy();
+            chartInstance = null;
+        }
         return;
     }
 
@@ -257,7 +346,10 @@ const renderTable = () => {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter ? formatNumber(row.kmPerLiter) : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.pesosIn30Days ? formatCurrency(row.pesosIn30Days) : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="deleteRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors">
+                <button onclick="editRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
+                    <i data-lucide="edit-2" class="h-4 w-4"></i>
+                </button>
+                <button onclick="deleteRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
@@ -267,14 +359,14 @@ const renderTable = () => {
 
     lucide.createIcons();
     updateStats(processedData);
+    updateChart(processedData);
 };
 
 // Handle Form Submit
 form.addEventListener('submit', (e) => {
     e.preventDefault();
 
-    const newRecord = {
-        id: Date.now().toString(),
+    const recordData = {
         date: dateInput.value,
         odometer: parseFloat(odometerInput.value),
         liters: parseFloat(litersInput.value),
@@ -282,7 +374,15 @@ form.addEventListener('submit', (e) => {
         profile: activeProfile
     };
 
-    records.push(newRecord);
+    if (editingId) {
+        records = records.map(r => r.id === editingId ? { ...recordData, id: editingId } : r);
+        editingId = null;
+        submitBtn.textContent = 'Save Record';
+        cancelEditBtn.classList.add('hidden');
+    } else {
+        records.push({ ...recordData, id: Date.now().toString() });
+    }
+
     localStorage.setItem('fuelRecords', JSON.stringify(records));
     
     // Reset inputs but keep date

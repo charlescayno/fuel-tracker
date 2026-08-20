@@ -15,8 +15,31 @@ const statAvgCost = document.getElementById('stat-avg-cost');
 const stat30dCost = document.getElementById('stat-30d-cost');
 const statTotalDist = document.getElementById('stat-total-dist');
 
+// Default Initial Data from Spreadsheet
+const initialData = [
+    { id: '1', date: '2025-11-01', odometer: 3950, liters: 0, pricePerLiter: 0 },
+    { id: '2', date: '2025-11-08', odometer: 4084, liters: 4.57, pricePerLiter: 55.90 },
+    { id: '3', date: '2025-11-22', odometer: 4226, liters: 5.34, pricePerLiter: 57.60 },
+    { id: '4', date: '2025-12-06', odometer: 4346, liters: 4.35, pricePerLiter: 55.40 },
+    { id: '5', date: '2025-12-19', odometer: 4494, liters: 5.28, pricePerLiter: 56.60 },
+    { id: '6', date: '2026-01-02', odometer: 4634, liters: 4.61, pricePerLiter: 53.90 },
+    { id: '7', date: '2026-01-15', odometer: 4788, liters: 4.86, pricePerLiter: 54.10 },
+    { id: '8', date: '2026-01-27', odometer: 4939, liters: 4.76, pricePerLiter: 53.60 },
+    { id: '9', date: '2026-02-15', odometer: 5110, liters: 6.11, pricePerLiter: 53.60 },
+    { id: '10', date: '2026-03-03', odometer: 5280, liters: 5.31, pricePerLiter: 54.90 },
+    { id: '11', date: '2026-03-13', odometer: 5394, liters: 3.99, pricePerLiter: 67.70 },
+    { id: '12', date: '2026-03-25', odometer: 5546, liters: 4.69, pricePerLiter: 91.20 },
+    { id: '13', date: '2026-04-17', odometer: 5710, liters: 4.92, pricePerLiter: 84.40 },
+    { id: '14', date: '2026-05-03', odometer: 5875, liters: 5.10, pricePerLiter: 78.50 },
+    { id: '15', date: '2026-05-20', odometer: 6044, liters: 5.08, pricePerLiter: 80.40 }
+];
+
 // State
-let records = JSON.parse(localStorage.getItem('fuelRecords')) || [];
+let records = JSON.parse(localStorage.getItem('fuelRecords'));
+if (!records || records.length === 0) {
+    records = initialData;
+    localStorage.setItem('fuelRecords', JSON.stringify(records));
+}
 
 // Set default date to today
 dateInput.valueAsDate = new Date();

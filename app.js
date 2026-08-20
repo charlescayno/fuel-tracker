@@ -46,7 +46,7 @@ dateInput.valueAsDate = new Date();
 
 // Helper: Format Currency
 const formatCurrency = (amount) => {
-    return `?${Number(amount).toFixed(2)}`;
+    return `₱${Number(amount).toFixed(2)}`;
 };
 
 // Helper: Format Number
@@ -127,8 +127,8 @@ const processRecords = (data) => {
 const updateStats = (processedData) => {
     if (processedData.length < 2) {
         statAvgEconomy.textContent = "-- km/L";
-        statAvgCost.textContent = "?--";
-        stat30dCost.textContent = "?--";
+        statAvgCost.textContent = "₱--";
+        stat30dCost.textContent = "₱--";
         statTotalDist.textContent = "-- km";
         return;
     }
@@ -227,7 +227,7 @@ form.addEventListener('submit', (e) => {
     odometerInput.value = '';
     litersInput.value = '';
     priceInput.value = '';
-    calculatedTotal.textContent = '?0.00';
+    calculatedTotal.textContent = '₱0.00';
     
     renderTable();
 });

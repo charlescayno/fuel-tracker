@@ -28,13 +28,23 @@
 </head>
 <body class="bg-gray-50 min-h-screen text-gray-800 font-sans">
 
-    <!-- Navbar -->
     <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
                     <i data-lucide="fuel" class="h-6 w-6 text-blue-600 mr-2"></i>
-                    <span class="font-bold text-xl text-gray-900">FuelTracker</span>
+                    <span class="font-bold text-xl text-gray-900 hidden sm:block">FuelTracker</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div class="flex items-center bg-gray-50 rounded-md border border-gray-300 px-2 py-1">
+                        <i data-lucide="car" class="h-4 w-4 text-gray-500 mr-2"></i>
+                        <select id="profile-select" class="bg-transparent border-none text-gray-900 text-sm focus:ring-0 focus:outline-none cursor-pointer pr-2">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <button id="add-profile-btn" class="text-sm bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 px-3 py-1.5 rounded-md font-medium transition-colors border border-blue-200">
+                        + Vehicle
+                    </button>
                 </div>
             </div>
         </div>

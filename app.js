@@ -6,7 +6,7 @@ import {
     addDoc, 
     doc, 
     deleteDoc, 
-    setDoc,
+    setDoc, 
     writeBatch
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
@@ -69,27 +69,29 @@ let maintRecords = [];
 let profiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
 let activeProfile = localStorage.getItem('activeProfile') || 'ADV 150';
 
-maintDateInput.valueAsDate = new Date();
-dateInput.valueAsDate = new Date();
+if (maintDateInput) maintDateInput.valueAsDate = new Date();
+if (dateInput) dateInput.valueAsDate = new Date();
 
 // Tab Switching Logic
-tabFuel.addEventListener('click', () => {
-    tabFuel.classList.replace('border-transparent', 'border-blue-600');
-    tabFuel.classList.replace('text-gray-500', 'text-blue-600');
-    tabMaintenance.classList.replace('border-blue-600', 'border-transparent');
-    tabMaintenance.classList.replace('text-blue-600', 'text-gray-500');
-    viewFuel.classList.remove('hidden');
-    viewMaintenance.classList.add('hidden');
-});
+if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
+    tabFuel.addEventListener('click', () => {
+        tabFuel.classList.replace('border-transparent', 'border-blue-600');
+        tabFuel.classList.replace('text-gray-500', 'text-blue-600');
+        tabMaintenance.classList.replace('border-blue-600', 'border-transparent');
+        tabMaintenance.classList.replace('text-blue-600', 'text-gray-500');
+        viewFuel.classList.remove('hidden');
+        viewMaintenance.classList.add('hidden');
+    });
 
-tabMaintenance.addEventListener('click', () => {
-    tabMaintenance.classList.replace('border-transparent', 'border-blue-600');
-    tabMaintenance.classList.replace('text-gray-500', 'text-blue-600');
-    tabFuel.classList.replace('border-blue-600', 'border-transparent');
-    tabFuel.classList.replace('text-blue-600', 'text-gray-500');
-    viewMaintenance.classList.remove('hidden');
-    viewFuel.classList.add('hidden');
-});
+    tabMaintenance.addEventListener('click', () => {
+        tabMaintenance.classList.replace('border-transparent', 'border-blue-600');
+        tabMaintenance.classList.replace('text-gray-500', 'text-blue-600');
+        tabFuel.classList.replace('border-blue-600', 'border-transparent');
+        tabFuel.classList.replace('text-blue-600', 'text-gray-500');
+        viewMaintenance.classList.remove('hidden');
+        viewFuel.classList.add('hidden');
+    });
+}
 
 // Ensure active profile is in list
 if (!profiles.includes(activeProfile)) {
@@ -99,16 +101,19 @@ if (!profiles.includes(activeProfile)) {
 
 // Helper: Format Currency
 const formatCurrency = (amount) => {
-    return \?\\;
+    if (amount === null || amount === undefined || isNaN(amount)) return '₱0.00';
+    return `₱${Number(amount).toFixed(2)}`;
 };
 
 // Helper: Format Number
 const formatNumber = (num, decimals = 2) => {
+    if (num === null || num === undefined || isNaN(num)) return '-';
     return Number(num).toFixed(decimals);
 };
 
 // Render Profiles Dropdown
 const renderProfiles = () => {
+    if (!profileSelect) return;
     profileSelect.innerHTML = '';
     profiles.forEach(p => {
         const opt = document.createElement('option');
@@ -121,49 +126,56 @@ const renderProfiles = () => {
 
 // Calculate total amount in form on input change
 const calculateFormTotal = () => {
+    if (!calculatedTotal) return;
     const liters = parseFloat(litersInput.value) || 0;
     const price = parseFloat(priceInput.value) || 0;
     const total = liters * price;
     calculatedTotal.textContent = formatCurrency(total);
 };
 
-litersInput.addEventListener('input', calculateFormTotal);
-priceInput.addEventListener('input', calculateFormTotal);
+if (litersInput) litersInput.addEventListener('input', calculateFormTotal);
+if (priceInput) priceInput.addEventListener('input', calculateFormTotal);
 
 // Handle Profile Change
-profileSelect.addEventListener('change', (e) => {
-    activeProfile = e.target.value;
-    localStorage.setItem('activeProfile', activeProfile);
-    renderTable();
-    renderMaintenanceTable();
-});
-
-// Handle Add Profile
-addProfileBtn.addEventListener('click', () => {
-    const newProfile = prompt('Enter new vehicle name (e.g. Civic, NMAX):');
-    if (newProfile && newProfile.trim() !== '') {
-        const trimmed = newProfile.trim();
-        if (!profiles.includes(trimmed)) {
-            profiles.push(trimmed);
-            localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
-        }
-        activeProfile = trimmed;
+if (profileSelect) {
+    profileSelect.addEventListener('change', (e) => {
+        activeProfile = e.target.value;
         localStorage.setItem('activeProfile', activeProfile);
-        renderProfiles();
         renderTable();
         renderMaintenanceTable();
-    }
-});
+    });
+}
+
+// Handle Add Profile
+if (addProfileBtn) {
+    addProfileBtn.addEventListener('click', () => {
+        const newProfile = prompt('Enter new vehicle name (e.g. Civic, NMAX):');
+        if (newProfile && newProfile.trim() !== '') {
+            const trimmed = newProfile.trim();
+            if (!profiles.includes(trimmed)) {
+                profiles.push(trimmed);
+                localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
+            }
+            activeProfile = trimmed;
+            localStorage.setItem('activeProfile', activeProfile);
+            renderProfiles();
+            renderTable();
+            renderMaintenanceTable();
+        }
+    });
+}
 
 // Cancel Edit
-cancelEditBtn.addEventListener('click', () => {
-    editingId = null;
-    form.reset();
-    dateInput.valueAsDate = new Date();
-    calculatedTotal.textContent = '?0.00';
-    submitBtn.textContent = 'Save Record';
-    cancelEditBtn.classList.add('hidden');
-});
+if (cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', () => {
+        editingId = null;
+        form.reset();
+        dateInput.valueAsDate = new Date();
+        calculatedTotal.textContent = '₱0.00';
+        submitBtn.textContent = 'Save Record';
+        cancelEditBtn.classList.add('hidden');
+    });
+}
 
 // Make functions globally available for inline onclick handlers
 window.editRecord = (id) => {
@@ -184,13 +196,13 @@ window.editRecord = (id) => {
 };
 
 window.deleteRecord = async (id) => {
-    if(confirm('Are you sure you want to delete this record?')) {
+    if (confirm('Are you sure you want to delete this record?')) {
         await deleteDoc(doc(db, "fuelRecords", id));
     }
 };
 
 window.deleteMaintRecord = async (id) => {
-    if(confirm('Are you sure you want to delete this maintenance record?')) {
+    if (confirm('Are you sure you want to delete this maintenance record?')) {
         await deleteDoc(doc(db, "maintRecords", id));
     }
 };
@@ -200,7 +212,7 @@ const updateChart = (processedData) => {
     const ctx = document.getElementById('efficiencyChart');
     if (!ctx) return;
     
-    const chartData = processedData.filter(d => d.kmPerLiter !== null);
+    const chartData = processedData.filter(d => d.kmPerLiter !== null && !isNaN(d.kmPerLiter));
     const labels = chartData.map(d => new Date(d.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
     const dataPoints = chartData.map(d => d.kmPerLiter);
 
@@ -252,7 +264,7 @@ const processRecords = (data) => {
     const sortedData = [...data].sort((a, b) => new Date(a.date) - new Date(b.date));
     
     return sortedData.map((record, index) => {
-        const amount = record.liters * record.pricePerLiter;
+        const amount = (record.liters || 0) * (record.pricePerLiter || 0);
         
         if (index === 0) {
             return {
@@ -271,16 +283,16 @@ const processRecords = (data) => {
         
         const prevRecord = sortedData[index - 1];
         const tripKm = record.odometer - prevRecord.odometer;
-        const pesoPerKm = amount / tripKm;
-        const kmPerLiter = tripKm / record.liters;
+        const pesoPerKm = tripKm > 0 ? amount / tripKm : null;
+        const kmPerLiter = (record.liters > 0) ? tripKm / record.liters : null;
         
         const diffTime = Math.abs(new Date(record.date) - new Date(prevRecord.date));
         const daysInterval = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
         const avgKmPerDay = daysInterval > 0 ? tripKm / daysInterval : 0;
         const kmIn30Days = avgKmPerDay * 30;
-        const litersIn30Days = (kmIn30Days / kmPerLiter);
-        const pesosIn30Days = (litersIn30Days * record.pricePerLiter);
+        const litersIn30Days = kmPerLiter ? (kmIn30Days / kmPerLiter) : null;
+        const pesosIn30Days = (litersIn30Days && record.pricePerLiter) ? (litersIn30Days * record.pricePerLiter) : null;
 
         return {
             ...record,
@@ -299,10 +311,12 @@ const processRecords = (data) => {
 
 // Update Dashboard Stats
 const updateStats = (processedData) => {
+    if (!statAvgEconomy || !statAvgCost || !stat30dCost || !statTotalDist) return;
+
     if (processedData.length < 2) {
         statAvgEconomy.textContent = "-- km/L";
-        statAvgCost.textContent = "?--";
-        stat30dCost.textContent = "?--";
+        statAvgCost.textContent = "₱--";
+        stat30dCost.textContent = "₱--";
         statTotalDist.textContent = "-- km";
         return;
     }
@@ -312,36 +326,38 @@ const updateStats = (processedData) => {
     let totalAmount = 0;
     
     for (let i = 1; i < processedData.length; i++) {
-        totalTripKm += processedData[i].tripKm;
-        totalLiters += processedData[i].liters;
-        totalAmount += processedData[i].amount;
+        if (processedData[i].tripKm) totalTripKm += processedData[i].tripKm;
+        if (processedData[i].liters) totalLiters += processedData[i].liters;
+        if (processedData[i].amount) totalAmount += processedData[i].amount;
     }
 
-    const avgEconomy = totalTripKm / totalLiters;
-    const fuelCostPerKm = totalAmount / totalTripKm;
+    const avgEconomy = totalLiters > 0 ? totalTripKm / totalLiters : 0;
+    const fuelCostPerKm = totalTripKm > 0 ? totalAmount / totalTripKm : 0;
     
     const latestRecord = processedData[processedData.length - 1];
     const firstRecord = processedData[0];
     const totalDistance = latestRecord.odometer - firstRecord.odometer;
 
     const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
-    const totalMaintAmount = profileMaint.reduce((sum, r) => sum + r.cost, 0);
+    const totalMaintAmount = profileMaint.reduce((sum, r) => sum + (r.cost || 0), 0);
     const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
 
-    statAvgEconomy.textContent = \\ km/L\;
+    statAvgEconomy.textContent = `${formatNumber(avgEconomy)} km/L`;
     statAvgCost.textContent = formatCurrency(fuelCostPerKm);
     stat30dCost.textContent = formatCurrency(trueCostPerKm);
-    statTotalDist.textContent = \\ km\;
+    statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
 };
 
 // Render Tables
 const renderTable = () => {
+    if (!historyTableBody) return;
     historyTableBody.innerHTML = '';
     const profileRecords = records.filter(r => r.profile === activeProfile);
+    const tableEl = document.querySelector('#view-fuel table');
     
     if (profileRecords.length === 0) {
-        emptyState.classList.remove('hidden');
-        document.querySelector('table').classList.add('hidden');
+        if (emptyState) emptyState.classList.remove('hidden');
+        if (tableEl) tableEl.classList.add('hidden');
         updateStats([]);
         if (chartInstance) {
             chartInstance.destroy();
@@ -350,8 +366,8 @@ const renderTable = () => {
         return;
     }
 
-    emptyState.classList.add('hidden');
-    document.querySelector('table').classList.remove('hidden');
+    if (emptyState) emptyState.classList.add('hidden');
+    if (tableEl) tableEl.classList.remove('hidden');
 
     const processedData = processRecords(profileRecords);
     const displayData = [...processedData].sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -362,45 +378,47 @@ const renderTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
-        tr.innerHTML = \
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">\</td>
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.tripKm !== null ? row.tripKm : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatNumber(row.liters)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatCurrency(row.pricePerLiter)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">${row.pesoPerKm !== null ? formatCurrency(row.pesoPerKm) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editRecord('\')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
+                <button onclick="editRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
-                <button onclick="deleteRecord('\')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
-        \;
+        `;
         historyTableBody.appendChild(tr);
     });
 
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
     updateStats(processedData);
     updateChart(processedData);
 };
 
 const renderMaintenanceTable = () => {
+    if (!maintTableBody) return;
     maintTableBody.innerHTML = '';
     const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
+    const tableContainer = maintTableBody.closest('table');
     
     if (profileMaint.length === 0) {
-        maintEmptyState.classList.remove('hidden');
-        maintTableBody.parentElement.classList.add('hidden');
+        if (maintEmptyState) maintEmptyState.classList.remove('hidden');
+        if (tableContainer) tableContainer.classList.add('hidden');
         return;
     }
 
-    maintEmptyState.classList.add('hidden');
-    maintTableBody.parentElement.classList.remove('hidden');
+    if (maintEmptyState) maintEmptyState.classList.add('hidden');
+    if (tableContainer) tableContainer.classList.remove('hidden');
 
     const displayData = [...profileMaint].sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -410,21 +428,21 @@ const renderMaintenanceTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-        tr.innerHTML = \
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">\</td>
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${row.type}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.notes || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">${formatCurrency(row.cost)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="deleteMaintRecord('\')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
-        \;
+        `;
         maintTableBody.appendChild(tr);
     });
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
     
     const profileRecords = records.filter(r => r.profile === activeProfile);
     const processedData = processRecords(profileRecords);
@@ -432,112 +450,79 @@ const renderMaintenanceTable = () => {
 };
 
 // Handle Form Submits
-form.addEventListener('submit', async (e) => {
-    e.preventDefault();
+if (form) {
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-    const recordData = {
-        date: dateInput.value,
-        odometer: parseFloat(odometerInput.value),
-        liters: parseFloat(litersInput.value),
-        pricePerLiter: parseFloat(priceInput.value),
-        profile: activeProfile
-    };
+        const recordData = {
+            date: dateInput.value,
+            odometer: parseFloat(odometerInput.value),
+            liters: parseFloat(litersInput.value),
+            pricePerLiter: parseFloat(priceInput.value),
+            profile: activeProfile
+        };
 
-    if (editingId) {
-        await setDoc(doc(db, "fuelRecords", editingId), recordData);
-        editingId = null;
-        submitBtn.textContent = 'Save Record';
-        cancelEditBtn.classList.add('hidden');
-    } else {
-        await addDoc(collection(db, "fuelRecords"), recordData);
-    }
+        if (editingId) {
+            await setDoc(doc(db, "fuelRecords", editingId), recordData);
+            editingId = null;
+            submitBtn.textContent = 'Save Record';
+            cancelEditBtn.classList.add('hidden');
+        } else {
+            await addDoc(collection(db, "fuelRecords"), recordData);
+        }
 
-    odometerInput.value = '';
-    litersInput.value = '';
-    priceInput.value = '';
-    calculatedTotal.textContent = '?0.00';
-});
+        odometerInput.value = '';
+        litersInput.value = '';
+        priceInput.value = '';
+        calculatedTotal.textContent = '₱0.00';
+    });
+}
 
-maintForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const newRecord = {
-        date: maintDateInput.value,
-        odometer: parseFloat(maintOdoInput.value),
-        type: maintTypeInput.value,
-        cost: parseFloat(maintCostInput.value),
-        notes: maintNotesInput.value,
-        profile: activeProfile
-    };
+if (maintForm) {
+    maintForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newRecord = {
+            date: maintDateInput.value,
+            odometer: parseFloat(maintOdoInput.value),
+            type: maintTypeInput.value,
+            cost: parseFloat(maintCostInput.value),
+            notes: maintNotesInput.value,
+            profile: activeProfile
+        };
 
-    await addDoc(collection(db, "maintRecords"), newRecord);
-    
-    maintOdoInput.value = '';
-    maintCostInput.value = '';
-    maintNotesInput.value = '';
-});
+        await addDoc(collection(db, "maintRecords"), newRecord);
+        
+        maintOdoInput.value = '';
+        maintCostInput.value = '';
+        maintNotesInput.value = '';
+    });
+}
 
 // Clear All Data
-clearDataBtn.addEventListener('click', async () => {
-    if(confirm(\Are you sure you want to delete ALL records for \? This cannot be undone.\)) {
-        const batch = writeBatch(db);
-        
-        const profileFuel = records.filter(r => r.profile === activeProfile);
-        profileFuel.forEach(r => {
-            batch.delete(doc(db, "fuelRecords", r.id));
-        });
+if (clearDataBtn) {
+    clearDataBtn.addEventListener('click', async () => {
+        if (confirm(`Are you sure you want to delete ALL records for ${activeProfile}? This cannot be undone.`)) {
+            const batch = writeBatch(db);
+            
+            const profileFuel = records.filter(r => r.profile === activeProfile);
+            profileFuel.forEach(r => {
+                batch.delete(doc(db, "fuelRecords", r.id));
+            });
 
-        const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
-        profileMaint.forEach(r => {
-            batch.delete(doc(db, "maintRecords", r.id));
-        });
+            const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
+            profileMaint.forEach(r => {
+                batch.delete(doc(db, "maintRecords", r.id));
+            });
 
-        await batch.commit();
-    }
-});
-
-// SEED DATA
-const seedData = async () => {
-    if (localStorage.getItem('hasSeededData4')) return;
-    
-    const rawData = [
-      { date: '2025-11-08', odometer: 4084, liters: 4.57, pricePerLiter: 55.90, profile: 'ADV 150' },
-      { date: '2025-11-22', odometer: 4226, liters: 5.34, pricePerLiter: 57.60, profile: 'ADV 150' },
-      { date: '2025-12-06', odometer: 4346, liters: 4.35, pricePerLiter: 55.40, profile: 'ADV 150' },
-      { date: '2025-12-19', odometer: 4494, liters: 5.28, pricePerLiter: 56.60, profile: 'ADV 150' },
-      { date: '2026-01-02', odometer: 4634, liters: 4.61, pricePerLiter: 53.90, profile: 'ADV 150' },
-      { date: '2026-01-15', odometer: 4788, liters: 4.86, pricePerLiter: 54.10, profile: 'ADV 150' },
-      { date: '2026-01-27', odometer: 4939, liters: 4.76, pricePerLiter: 53.60, profile: 'ADV 150' },
-      { date: '2026-02-15', odometer: 5110, liters: 6.11, pricePerLiter: 53.60, profile: 'ADV 150' },
-      { date: '2026-03-03', odometer: 5280, liters: 5.31, pricePerLiter: 54.90, profile: 'ADV 150' },
-      { date: '2026-03-13', odometer: 5394, liters: 3.99, pricePerLiter: 67.70, profile: 'ADV 150' },
-      { date: '2026-03-25', odometer: 5546, liters: 4.69, pricePerLiter: 91.20, profile: 'ADV 150' },
-      { date: '2026-04-17', odometer: 5710, liters: 4.92, pricePerLiter: 84.40, profile: 'ADV 150' },
-      { date: '2026-05-03', odometer: 5875, liters: 5.1, pricePerLiter: 78.50, profile: 'ADV 150' },
-      { date: '2026-05-20', odometer: 6044, liters: 5.08, pricePerLiter: 80.40, profile: 'ADV 150' }
-    ];
-
-    for (const record of rawData) {
-        // Only add if not already in records
-        const exists = records.some(r => r.date === record.date && r.odometer === record.odometer);
-        if (!exists) {
-            await addDoc(collection(db, "fuelRecords"), record);
+            await batch.commit();
         }
-    }
-    localStorage.setItem('hasSeededData4', 'true');
-};
-
+    });
+}
 
 // REAL-TIME LISTENERS
-let migrationCheckDone = false;
-
 onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     renderTable();
-    
-    if (!migrationCheckDone) {
-        migrationCheckDone = true;
-        seedData();
-    }
 });
 
 onSnapshot(collection(db, "maintRecords"), (snapshot) => {

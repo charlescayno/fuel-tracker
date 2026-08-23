@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { 
     getFirestore, 
+    enableIndexedDbPersistence,
     collection, 
     onSnapshot, 
     addDoc, 
@@ -10,7 +11,7 @@ import {
     writeBatch
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-// Your web app's Firebase configuration
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyD4UD0AEyWMaQrJhicTBd-_162zMRjOG58",
   authDomain: "fuel-tracker-c565c.firebaseapp.com",
@@ -20,9 +21,93 @@ const firebaseConfig = {
   appId: "1:758052138447:web:650d2fe9a99d474bfab6ba"
 };
 
-// Initialize Firebase
+// Initialize Firebase & Firestore
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+
+// Enable Firestore Offline IndexedDB Persistence
+enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+        console.warn('Firestore persistence warning: Multiple tabs open.');
+    } else if (err.code === 'unimplemented') {
+        console.warn('Firestore persistence is not supported in this browser.');
+    }
+});
+
+// Register Service Worker for PWA & Offline Caching
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then((reg) => {
+            console.log('[PWA] Service Worker registered:', reg.scope);
+        }).catch((err) => {
+            console.warn('[PWA] Service Worker registration failed:', err);
+        });
+    });
+}
+
+// PWA Install Prompt Handling
+let deferredInstallPrompt = null;
+const installPwaBtn = document.getElementById('install-pwa-btn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (installPwaBtn) {
+        installPwaBtn.classList.remove('hidden');
+        installPwaBtn.classList.add('flex');
+    }
+});
+
+if (installPwaBtn) {
+    installPwaBtn.addEventListener('click', async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        const choiceResult = await deferredInstallPrompt.userChoice;
+        if (choiceResult.outcome === 'accepted') {
+            console.log('[PWA] User accepted installation');
+        }
+        deferredInstallPrompt = null;
+        installPwaBtn.classList.add('hidden');
+        installPwaBtn.classList.remove('flex');
+    });
+}
+
+window.addEventListener('appinstalled', () => {
+    console.log('[PWA] App successfully installed');
+    if (installPwaBtn) {
+        installPwaBtn.classList.add('hidden');
+        installPwaBtn.classList.remove('flex');
+    }
+});
+
+// Online / Offline Status Indicators
+const networkStatus = document.getElementById('network-status');
+const offlineBanner = document.getElementById('offline-banner');
+
+const updateOnlineStatus = () => {
+    const isOnline = navigator.onLine;
+    if (networkStatus) {
+        if (isOnline) {
+            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> Online';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-emerald-600 mt-0.5';
+        } else {
+            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span> Offline (Cached)';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-amber-600 mt-0.5';
+        }
+    }
+    if (offlineBanner) {
+        if (isOnline) {
+            offlineBanner.classList.add('hidden');
+        } else {
+            offlineBanner.classList.remove('hidden');
+        }
+    }
+    if (window.lucide) lucide.createIcons();
+};
+
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
 
 // DOM Elements
 const form = document.getElementById('add-record-form');
@@ -38,6 +123,12 @@ const profileSelect = document.getElementById('profile-select');
 const addProfileBtn = document.getElementById('add-profile-btn');
 const cancelEditBtn = document.getElementById('cancel-edit-btn');
 const submitBtn = document.getElementById('submit-btn');
+
+// Last Odometer Hint Elements
+const lastOdoHint = document.getElementById('last-odo-hint');
+const lastDateHint = document.getElementById('last-date-hint');
+const maintLastOdoHint = document.getElementById('maint-last-odo-hint');
+const maintLastDateHint = document.getElementById('maint-last-date-hint');
 
 let editingId = null;
 let chartInstance = null;
@@ -87,8 +178,10 @@ if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
     tabFuel.addEventListener('click', () => {
         tabFuel.classList.replace('border-transparent', 'border-blue-600');
         tabFuel.classList.replace('text-gray-500', 'text-blue-600');
+        tabFuel.classList.add('font-semibold');
         tabMaintenance.classList.replace('border-blue-600', 'border-transparent');
         tabMaintenance.classList.replace('text-blue-600', 'text-gray-500');
+        tabMaintenance.classList.remove('font-semibold');
         viewFuel.classList.remove('hidden');
         viewMaintenance.classList.add('hidden');
     });
@@ -96,8 +189,10 @@ if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
     tabMaintenance.addEventListener('click', () => {
         tabMaintenance.classList.replace('border-transparent', 'border-blue-600');
         tabMaintenance.classList.replace('text-gray-500', 'text-blue-600');
+        tabMaintenance.classList.add('font-semibold');
         tabFuel.classList.replace('border-blue-600', 'border-transparent');
         tabFuel.classList.replace('text-blue-600', 'text-gray-500');
+        tabFuel.classList.remove('font-semibold');
         viewMaintenance.classList.remove('hidden');
         viewFuel.classList.add('hidden');
     });
@@ -155,6 +250,59 @@ const syncProfilesFromRecords = () => {
     }
 };
 
+// Update Last Odometer Hints
+const updateOdometerHints = () => {
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileFuel = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+    const profileMaint = maintRecords.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+
+    // Fuel Form Odometer Hint
+    if (lastOdoHint && lastDateHint) {
+        if (profileFuel.length > 0) {
+            const sortedFuel = [...profileFuel].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const lastRecord = sortedFuel[sortedFuel.length - 1];
+            const dateStr = new Date(lastRecord.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            
+            lastOdoHint.textContent = `${formatNumber(lastRecord.odometer, 0)} km`;
+            lastDateHint.textContent = `(${dateStr})`;
+            
+            // Allow clicking to pre-fill or focus
+            lastOdoHint.onclick = () => {
+                odometerInput.focus();
+            };
+        } else {
+            lastOdoHint.textContent = 'No logs yet';
+            lastDateHint.textContent = '';
+            lastOdoHint.onclick = null;
+        }
+    }
+
+    // Maintenance Form Odometer Hint (Latest across fuel & maintenance)
+    if (maintLastOdoHint && maintLastDateHint) {
+        const allLogs = [
+            ...profileFuel.map(r => ({ date: r.date, odo: r.odometer })),
+            ...profileMaint.map(r => ({ date: r.date, odo: r.odometer }))
+        ].filter(r => r.odo && !isNaN(r.odo));
+
+        if (allLogs.length > 0) {
+            const sortedLogs = allLogs.sort((a, b) => new Date(a.date) - new Date(b.date));
+            const latestLog = sortedLogs[sortedLogs.length - 1];
+            const dateStr = new Date(latestLog.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            maintLastOdoHint.textContent = `${formatNumber(latestLog.odo, 0)} km`;
+            maintLastDateHint.textContent = `(${dateStr})`;
+            
+            maintLastOdoHint.onclick = () => {
+                maintOdoInput.focus();
+            };
+        } else {
+            maintLastOdoHint.textContent = 'No logs yet';
+            maintLastDateHint.textContent = '';
+            maintLastOdoHint.onclick = null;
+        }
+    }
+};
+
 // Calculate total amount in form on input change
 const calculateFormTotal = () => {
     if (!calculatedTotal) return;
@@ -174,6 +322,7 @@ if (profileSelect) {
         localStorage.setItem('activeProfile', activeProfile);
         renderTable();
         renderMaintenanceTable();
+        updateOdometerHints();
     });
 }
 
@@ -193,6 +342,7 @@ if (addProfileBtn) {
             renderProfiles();
             renderTable();
             renderMaintenanceTable();
+            updateOdometerHints();
         }
     });
 }
@@ -405,6 +555,7 @@ const renderTable = () => {
             chartInstance.destroy();
             chartInstance = null;
         }
+        updateOdometerHints();
         return;
     }
 
@@ -445,6 +596,7 @@ const renderTable = () => {
     if (window.lucide) lucide.createIcons();
     updateStats(processedData);
     updateChart(processedData);
+    updateOdometerHints();
 };
 
 const renderMaintenanceTable = () => {
@@ -457,6 +609,7 @@ const renderMaintenanceTable = () => {
     if (profileMaint.length === 0) {
         if (maintEmptyState) maintEmptyState.classList.remove('hidden');
         if (tableContainer) tableContainer.classList.add('hidden');
+        updateOdometerHints();
         return;
     }
 
@@ -469,12 +622,12 @@ const renderMaintenanceTable = () => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50';
         const dateObj = new Date(row.date);
-        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+        const formattedDate = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${row.type}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">${row.type}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.notes || '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">${formatCurrency(row.cost)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -490,6 +643,7 @@ const renderMaintenanceTable = () => {
     const currentProfileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
     const processedData = processRecords(currentProfileRecords);
     updateStats(processedData);
+    updateOdometerHints();
 };
 
 // Handle Form Submits
@@ -616,7 +770,7 @@ if (clearDataBtn) {
     });
 }
 
-// REAL-TIME LISTENERS
+// REAL-TIME LISTENERS (Works online and offline via IndexedDB cache)
 onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     syncProfilesFromRecords();
@@ -630,3 +784,4 @@ onSnapshot(collection(db, "maintRecords"), (snapshot) => {
 });
 
 renderProfiles();
+updateOdometerHints();

@@ -497,7 +497,7 @@ clearDataBtn.addEventListener('click', async () => {
 
 // SEED DATA
 const seedData = async () => {
-    if (localStorage.getItem('hasSeededData3')) return;
+    if (localStorage.getItem('hasSeededData4')) return;
     
     const rawData = [
       { date: '2025-11-08', odometer: 4084, liters: 4.57, pricePerLiter: 55.90, profile: 'ADV 150' },
@@ -523,7 +523,7 @@ const seedData = async () => {
             await addDoc(collection(db, "fuelRecords"), record);
         }
     }
-    localStorage.setItem('hasSeededData3', 'true');
+    localStorage.setItem('hasSeededData4', 'true');
 };
 
 

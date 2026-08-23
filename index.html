@@ -90,7 +90,7 @@
         </div>
     </nav>
 
-    <!-- Offline Alert Banner (Shows when connection drops) -->
+    <!-- Offline Alert Banner -->
     <div id="offline-banner" class="hidden bg-amber-500 text-white text-xs text-center py-1.5 px-4 font-medium transition-all">
         <i data-lucide="wifi-off" class="h-3.5 w-3.5 inline mr-1"></i>
         You are offline. Logs will be saved on your device and automatically synced to the cloud once reconnected.
@@ -153,7 +153,7 @@
             </button>
             <button id="tab-maintenance" class="py-2.5 px-5 border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 font-medium text-sm focus:outline-none transition-colors flex items-center">
                 <i data-lucide="wrench" class="h-4 w-4 mr-1.5"></i>
-                Maintenance
+                Maintenance & Reminders
             </button>
         </div>
 
@@ -205,7 +205,7 @@
                                     <div class="flex items-center justify-between mt-1.5 px-0.5 text-xs text-gray-500">
                                         <span class="flex items-center">
                                             <i data-lucide="gauge" class="h-3.5 w-3.5 text-blue-500 mr-1 shrink-0"></i>
-                                            Last: <strong id="last-odo-hint" class="ml-1 text-blue-600 font-semibold cursor-pointer hover:underline" title="Click to autofill previous odometer">-- km</strong>
+                                            Last: <strong id="last-odo-hint" class="ml-1 text-blue-600 font-semibold cursor-pointer hover:underline" title="Click to focus odometer">-- km</strong>
                                         </span>
                                         <span id="last-date-hint" class="text-gray-400"></span>
                                     </div>
@@ -297,15 +297,42 @@
             </div>
         </div> <!-- End view-fuel -->
 
-        <!-- ==================== MAINTENANCE VIEW ==================== -->
+        <!-- ==================== MAINTENANCE & REMINDERS VIEW ==================== -->
         <div id="view-maintenance" class="hidden">
+
+            <!-- Preventative Maintenance Reminders Section -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 mb-8">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-3">
+                    <div class="flex items-center">
+                        <div class="p-2.5 bg-orange-100 text-orange-600 rounded-xl mr-3 shrink-0">
+                            <i data-lucide="shield-alert" class="h-6 w-6"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base sm:text-lg font-bold text-gray-900">Service Reminders & Health Meters</h3>
+                            <p class="text-xs text-gray-500">
+                                Current vehicle odometer: <strong id="reminder-current-odo" class="text-blue-600 font-semibold">-- km</strong>
+                            </p>
+                        </div>
+                    </div>
+                    <button id="add-custom-service-btn" class="text-xs bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium px-3 py-2 rounded-lg border border-gray-300 transition-colors flex items-center self-start sm:self-auto shadow-sm">
+                        <i data-lucide="plus" class="h-3.5 w-3.5 mr-1 text-orange-600"></i>
+                        <span>+ Custom Service</span>
+                    </button>
+                </div>
+
+                <!-- Live Service Reminders Grid -->
+                <div id="service-reminders-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+                    <!-- Rendered dynamically via JS -->
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
-                <!-- Add Maintenance Form -->
+                <!-- Add/Edit Maintenance Form -->
                 <div class="lg:col-span-1">
                     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
                         <div class="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                            <h2 class="text-base sm:text-lg font-semibold text-gray-800 flex items-center">
+                            <h2 id="maint-form-title" class="text-base sm:text-lg font-semibold text-gray-800 flex items-center">
                                 <i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600"></i>
                                 Log Maintenance
                             </h2>
@@ -324,7 +351,7 @@
                                     <div class="flex items-center justify-between mt-1.5 px-0.5 text-xs text-gray-500">
                                         <span class="flex items-center">
                                             <i data-lucide="gauge" class="h-3.5 w-3.5 text-orange-500 mr-1 shrink-0"></i>
-                                            Last: <strong id="maint-last-odo-hint" class="ml-1 text-orange-600 font-semibold cursor-pointer hover:underline" title="Click to autofill previous odometer">-- km</strong>
+                                            Last: <strong id="maint-last-odo-hint" class="ml-1 text-orange-600 font-semibold cursor-pointer hover:underline" title="Click to focus odometer">-- km</strong>
                                         </span>
                                         <span id="maint-last-date-hint" class="text-gray-400"></span>
                                     </div>
@@ -336,9 +363,9 @@
                                         <option value="Oil Change">Oil Change</option>
                                         <option value="Gear Oil">Gear Oil</option>
                                         <option value="CVT Cleaning / Belt">CVT Cleaning / Belt</option>
-                                        <option value="Tires">Tires</option>
-                                        <option value="Brakes">Brakes</option>
                                         <option value="Spark Plug / Air Filter">Spark Plug / Air Filter</option>
+                                        <option value="Brakes">Brakes</option>
+                                        <option value="Tires">Tires</option>
                                         <option value="Battery">Battery</option>
                                         <option value="Registration">Registration</option>
                                         <option value="Insurance">Insurance</option>
@@ -362,9 +389,14 @@
                                     <input type="text" id="maint-notes" placeholder="e.g. Fully Synthetic 10W-40" class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                                 </div>
 
-                                <button type="submit" class="w-full mt-4 bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-colors font-medium flex items-center justify-center">
-                                    Save Record
-                                </button>
+                                <div class="flex space-x-3 mt-4">
+                                    <button type="button" id="maint-cancel-edit-btn" class="hidden flex-1 bg-gray-100 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-200 focus:outline-none transition-colors font-medium border border-gray-300">
+                                        Cancel
+                                    </button>
+                                    <button type="submit" id="maint-submit-btn" class="flex-1 bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-colors font-medium flex items-center justify-center">
+                                        Save Record
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -413,7 +445,7 @@
 
     </main>
 
-    <script type="module" src="app.js?v=3.0"></script>
+    <script type="module" src="app.js?v=3.1"></script>
     <script>
         // Initialize Lucide icons on initial load
         lucide.createIcons();

@@ -109,7 +109,7 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
 
-// DOM Elements
+// DOM Elements - Fuel
 const form = document.getElementById('add-record-form');
 const dateInput = document.getElementById('date');
 const odometerInput = document.getElementById('odometer');
@@ -145,15 +145,24 @@ const tabMaintenance = document.getElementById('tab-maintenance');
 const viewFuel = document.getElementById('view-fuel');
 const viewMaintenance = document.getElementById('view-maintenance');
 
+const maintFormTitle = document.getElementById('maint-form-title');
 const maintForm = document.getElementById('add-maintenance-form');
 const maintDateInput = document.getElementById('maint-date');
 const maintOdoInput = document.getElementById('maint-odometer');
 const maintTypeInput = document.getElementById('maint-type');
 const maintCostInput = document.getElementById('maint-cost');
 const maintNotesInput = document.getElementById('maint-notes');
+const maintSubmitBtn = document.getElementById('maint-submit-btn');
+const maintCancelEditBtn = document.getElementById('maint-cancel-edit-btn');
 const maintTableBody = document.getElementById('maint-table-body');
 const maintEmptyState = document.getElementById('maint-empty-state');
-const maintSubmitBtn = maintForm ? maintForm.querySelector('button[type="submit"]') : null;
+
+// Service Reminders DOM Elements
+const serviceRemindersGrid = document.getElementById('service-reminders-grid');
+const reminderCurrentOdo = document.getElementById('reminder-current-odo');
+const addCustomServiceBtn = document.getElementById('add-custom-service-btn');
+
+let editingMaintId = null;
 
 // State
 let records = [];
@@ -195,6 +204,7 @@ if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
         tabFuel.classList.remove('font-semibold');
         viewMaintenance.classList.remove('hidden');
         viewFuel.classList.add('hidden');
+        renderServiceReminders();
     });
 }
 
@@ -250,6 +260,17 @@ const syncProfilesFromRecords = () => {
     }
 };
 
+// Get current vehicle highest odometer reading
+const getCurrentVehicleOdometer = (profileName) => {
+    const profileFuel = records.filter(r => r.profile === profileName || (profileName === 'Chery' && r.profile === 'Cherry'));
+    const profileMaint = maintRecords.filter(r => r.profile === profileName || (profileName === 'Chery' && r.profile === 'Cherry'));
+    const allOdos = [
+        ...profileFuel.map(r => Number(r.odometer)),
+        ...profileMaint.map(r => Number(r.odometer))
+    ].filter(v => v && !isNaN(v));
+    return allOdos.length > 0 ? Math.max(...allOdos) : 0;
+};
+
 // Update Last Odometer Hints
 const updateOdometerHints = () => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
@@ -265,11 +286,7 @@ const updateOdometerHints = () => {
             
             lastOdoHint.textContent = `${formatNumber(lastRecord.odometer, 0)} km`;
             lastDateHint.textContent = `(${dateStr})`;
-            
-            // Allow clicking to pre-fill or focus
-            lastOdoHint.onclick = () => {
-                odometerInput.focus();
-            };
+            lastOdoHint.onclick = () => odometerInput.focus();
         } else {
             lastOdoHint.textContent = 'No logs yet';
             lastDateHint.textContent = '';
@@ -277,7 +294,7 @@ const updateOdometerHints = () => {
         }
     }
 
-    // Maintenance Form Odometer Hint (Latest across fuel & maintenance)
+    // Maintenance Form Odometer Hint
     if (maintLastOdoHint && maintLastDateHint) {
         const allLogs = [
             ...profileFuel.map(r => ({ date: r.date, odo: r.odometer })),
@@ -291,16 +308,234 @@ const updateOdometerHints = () => {
 
             maintLastOdoHint.textContent = `${formatNumber(latestLog.odo, 0)} km`;
             maintLastDateHint.textContent = `(${dateStr})`;
-            
-            maintLastOdoHint.onclick = () => {
-                maintOdoInput.focus();
-            };
+            maintLastOdoHint.onclick = () => maintOdoInput.focus();
         } else {
             maintLastOdoHint.textContent = 'No logs yet';
             maintLastDateHint.textContent = '';
             maintLastOdoHint.onclick = null;
         }
     }
+};
+
+// ==================== SERVICE REMINDERS & HEALTH METERS ====================
+
+// Default Service Interval Definitions
+const defaultServices = [
+    { id: 'oil_change', name: 'Oil Change', defaultInterval: 2000, icon: 'droplet', matchTypes: ['oil change', 'engine oil'] },
+    { id: 'gear_oil', name: 'Gear Oil', defaultInterval: 4000, icon: 'disc', matchTypes: ['gear oil', 'transmission'] },
+    { id: 'cvt_belt', name: 'CVT Belt / Spark Plug / Air Filter', defaultInterval: 8000, icon: 'cpu', matchTypes: ['cvt cleaning / belt', 'cvt', 'belt', 'spark plug', 'air filter'] },
+    { id: 'brakes_tires', name: 'Brakes & Tires Inspection', defaultInterval: 5000, icon: 'shield', matchTypes: ['brakes', 'tires'] }
+];
+
+// Get stored service config for active profile
+const getServicesConfig = () => {
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const key = `service_config_${currentProfileName}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+        try {
+            return JSON.parse(stored);
+        } catch (e) {
+            console.error('Error parsing stored service config:', e);
+        }
+    }
+    return defaultServices;
+};
+
+// Save service config for active profile
+const saveServicesConfig = (config) => {
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const key = `service_config_${currentProfileName}`;
+    localStorage.setItem(key, JSON.stringify(config));
+};
+
+// Global function to adjust service interval
+window.editServiceInterval = (serviceId) => {
+    const config = getServicesConfig();
+    const service = config.find(s => s.id === serviceId);
+    if (!service) return;
+
+    const currentInterval = service.defaultInterval;
+    const input = prompt(`Enter service interval in kilometers for "${service.name}":`, currentInterval);
+    if (input && !isNaN(input) && parseFloat(input) > 0) {
+        service.defaultInterval = parseFloat(input);
+        saveServicesConfig(config);
+        renderServiceReminders();
+    }
+};
+
+// Global function to quick-fill maintenance form from reminder card
+window.quickLogService = (serviceName) => {
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const currentOdo = getCurrentVehicleOdometer(currentProfileName);
+
+    if (maintDateInput) maintDateInput.valueAsDate = new Date();
+    if (maintOdoInput) maintOdoInput.value = currentOdo > 0 ? currentOdo : '';
+    
+    // Select service type in dropdown or add option
+    if (maintTypeInput) {
+        let found = false;
+        for (let i = 0; i < maintTypeInput.options.length; i++) {
+            if (maintTypeInput.options[i].text.toLowerCase() === serviceName.toLowerCase() ||
+                serviceName.toLowerCase().includes(maintTypeInput.options[i].value.toLowerCase())) {
+                maintTypeInput.selectedIndex = i;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            const opt = document.createElement('option');
+            opt.value = serviceName;
+            opt.textContent = serviceName;
+            opt.selected = true;
+            maintTypeInput.appendChild(opt);
+        }
+    }
+
+    if (maintCostInput) maintCostInput.focus();
+    maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+// Add Custom Service Reminder
+if (addCustomServiceBtn) {
+    addCustomServiceBtn.addEventListener('click', () => {
+        const name = prompt('Enter service name (e.g. Brake Fluid, Coolant Flush, Battery):');
+        if (!name || !name.trim()) return;
+        
+        const intervalInput = prompt(`Enter service interval in kilometers for "${name.trim()}":`, '5000');
+        if (!intervalInput || isNaN(intervalInput) || parseFloat(intervalInput) <= 0) return;
+        
+        const config = getServicesConfig();
+        const id = 'custom_' + Date.now();
+        config.push({
+            id: id,
+            name: name.trim(),
+            defaultInterval: parseFloat(intervalInput),
+            icon: 'wrench',
+            matchTypes: [name.trim().toLowerCase()]
+        });
+        saveServicesConfig(config);
+        
+        // Add to maintenance type dropdown if not exists
+        if (maintTypeInput) {
+            const opt = document.createElement('option');
+            opt.value = name.trim();
+            opt.textContent = name.trim();
+            maintTypeInput.appendChild(opt);
+        }
+
+        renderServiceReminders();
+    });
+}
+
+// Render Preventative Maintenance Reminders
+const renderServiceReminders = () => {
+    if (!serviceRemindersGrid) return;
+    
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const currentOdo = getCurrentVehicleOdometer(currentProfileName);
+    
+    if (reminderCurrentOdo) {
+        reminderCurrentOdo.textContent = `${formatNumber(currentOdo, 0)} km`;
+    }
+
+    const config = getServicesConfig();
+    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+    
+    serviceRemindersGrid.innerHTML = '';
+
+    config.forEach(service => {
+        const interval = service.defaultInterval;
+        
+        // Find most recent maintenance record matching this service type
+        const matchingLogs = profileMaint.filter(r => {
+            if (!r.type) return false;
+            const logType = r.type.toLowerCase();
+            return service.matchTypes ? service.matchTypes.some(m => logType.includes(m)) : logType.includes(service.name.toLowerCase());
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        let lastServiceOdo = 0;
+        let lastServiceDate = null;
+        let hasLogged = false;
+
+        if (matchingLogs.length > 0) {
+            lastServiceOdo = parseFloat(matchingLogs[0].odometer) || 0;
+            lastServiceDate = new Date(matchingLogs[0].date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+            hasLogged = true;
+        }
+
+        const kmSinceLast = Math.max(0, currentOdo - lastServiceOdo);
+        const remainingKm = interval - kmSinceLast;
+        const percentUsed = Math.min(100, Math.max(0, (kmSinceLast / interval) * 100));
+
+        let statusText = '';
+        let statusBadgeClass = '';
+        let progressBarColor = 'bg-emerald-500';
+        let statusIcon = 'check-circle';
+
+        if (remainingKm <= 0) {
+            const overdueKm = Math.abs(remainingKm);
+            statusText = `OVERDUE by ${formatNumber(overdueKm, 0)} km`;
+            statusBadgeClass = 'bg-rose-100 text-rose-700 border-rose-200';
+            progressBarColor = 'bg-rose-600';
+            statusIcon = 'alert-triangle';
+        } else if (remainingKm <= interval * 0.25) {
+            statusText = `Due soon! (${formatNumber(remainingKm, 0)} km left)`;
+            statusBadgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+            progressBarColor = 'bg-amber-500';
+            statusIcon = 'clock';
+        } else {
+            statusText = `Due in ${formatNumber(remainingKm, 0)} km`;
+            statusBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+            progressBarColor = 'bg-emerald-500';
+            statusIcon = 'shield-check';
+        }
+
+        const card = document.createElement('div');
+        card.className = 'bg-gray-50 rounded-xl p-4 border border-gray-200 flex flex-col justify-between hover:shadow-sm transition-all';
+        card.innerHTML = `
+            <div>
+                <div class="flex items-start justify-between mb-2">
+                    <div class="flex items-center space-x-2">
+                        <div class="p-2 rounded-lg bg-white border border-gray-200 shadow-2xs text-gray-700">
+                            <i data-lucide="${service.icon || 'wrench'}" class="h-4 w-4 text-orange-600"></i>
+                        </div>
+                        <h4 class="text-sm font-bold text-gray-900 leading-tight">${service.name}</h4>
+                    </div>
+                    <button onclick="editServiceInterval('${service.id}')" class="text-gray-400 hover:text-gray-700 p-1 rounded-md transition-colors" title="Adjust interval (current: every ${formatNumber(interval, 0)} km)">
+                        <i data-lucide="settings" class="h-3.5 w-3.5"></i>
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
+                    <span>Interval: <strong class="text-gray-700">${formatNumber(interval, 0)} km</strong></span>
+                    <span class="text-[11px] ${hasLogged ? 'text-gray-600' : 'text-gray-400'}">
+                        ${hasLogged ? `Last: ${formatNumber(lastServiceOdo, 0)} km` : 'No logs yet'}
+                    </span>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="w-full bg-gray-200 rounded-full h-2 mb-2.5 overflow-hidden">
+                    <div class="${progressBarColor} h-2 rounded-full transition-all duration-500" style="width: ${percentUsed}%;"></div>
+                </div>
+
+                <div class="flex items-center justify-between mb-3">
+                    <span class="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md border ${statusBadgeClass}">
+                        <i data-lucide="${statusIcon}" class="h-3 w-3 mr-1"></i>
+                        ${statusText}
+                    </span>
+                    <span class="text-[11px] font-medium text-gray-500">${formatNumber(kmSinceLast, 0)} / ${formatNumber(interval, 0)} km</span>
+                </div>
+            </div>
+
+            <button onclick="quickLogService('${service.name}')" class="w-full mt-2 text-xs bg-white hover:bg-orange-50 text-orange-700 font-semibold py-1.5 px-3 rounded-lg border border-orange-200 transition-colors flex items-center justify-center shadow-2xs">
+                <i data-lucide="plus" class="h-3.5 w-3.5 mr-1"></i> Log Service
+            </button>
+        `;
+        serviceRemindersGrid.appendChild(card);
+    });
+
+    if (window.lucide) lucide.createIcons();
 };
 
 // Calculate total amount in form on input change
@@ -322,6 +557,7 @@ if (profileSelect) {
         localStorage.setItem('activeProfile', activeProfile);
         renderTable();
         renderMaintenanceTable();
+        renderServiceReminders();
         updateOdometerHints();
     });
 }
@@ -342,12 +578,13 @@ if (addProfileBtn) {
             renderProfiles();
             renderTable();
             renderMaintenanceTable();
+            renderServiceReminders();
             updateOdometerHints();
         }
     });
 }
 
-// Cancel Edit
+// Cancel Fuel Edit
 if (cancelEditBtn) {
     cancelEditBtn.addEventListener('click', () => {
         editingId = null;
@@ -387,6 +624,39 @@ window.deleteRecord = async (id) => {
     }
 };
 
+// Edit Maintenance Record
+window.editMaintRecord = (id) => {
+    const record = maintRecords.find(r => r.id === id);
+    if (!record) return;
+
+    editingMaintId = id;
+    maintDateInput.value = record.date;
+    maintOdoInput.value = record.odometer;
+    maintTypeInput.value = record.type;
+    maintCostInput.value = record.cost;
+    maintNotesInput.value = record.notes || '';
+
+    if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="edit" class="h-5 w-5 mr-2 text-orange-600"></i> Edit Maintenance';
+    if (maintSubmitBtn) maintSubmitBtn.textContent = 'Update Record';
+    if (maintCancelEditBtn) maintCancelEditBtn.classList.remove('hidden');
+
+    if (window.lucide) lucide.createIcons();
+    maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+// Cancel Maintenance Edit
+if (maintCancelEditBtn) {
+    maintCancelEditBtn.addEventListener('click', () => {
+        editingMaintId = null;
+        maintForm.reset();
+        maintDateInput.valueAsDate = new Date();
+        if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600"></i> Log Maintenance';
+        if (maintSubmitBtn) maintSubmitBtn.textContent = 'Save Record';
+        maintCancelEditBtn.classList.add('hidden');
+        if (window.lucide) lucide.createIcons();
+    });
+}
+
 window.deleteMaintRecord = async (id) => {
     if (confirm('Are you sure you want to delete this maintenance record?')) {
         try {
@@ -397,7 +667,7 @@ window.deleteMaintRecord = async (id) => {
     }
 };
 
-// Update Chart
+// Update Efficiency Chart
 const updateChart = (processedData) => {
     const ctx = document.getElementById('efficiencyChart');
     if (!ctx) return;
@@ -597,6 +867,7 @@ const renderTable = () => {
     updateStats(processedData);
     updateChart(processedData);
     updateOdometerHints();
+    renderServiceReminders();
 };
 
 const renderMaintenanceTable = () => {
@@ -610,6 +881,7 @@ const renderMaintenanceTable = () => {
         if (maintEmptyState) maintEmptyState.classList.remove('hidden');
         if (tableContainer) tableContainer.classList.add('hidden');
         updateOdometerHints();
+        renderServiceReminders();
         return;
     }
 
@@ -622,7 +894,7 @@ const renderMaintenanceTable = () => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50';
         const dateObj = new Date(row.date);
-        const formattedDate = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
@@ -631,6 +903,9 @@ const renderMaintenanceTable = () => {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.notes || '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">${formatCurrency(row.cost)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button onclick="editMaintRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
+                    <i data-lucide="edit-2" class="h-4 w-4"></i>
+                </button>
                 <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
@@ -644,9 +919,10 @@ const renderMaintenanceTable = () => {
     const processedData = processRecords(currentProfileRecords);
     updateStats(processedData);
     updateOdometerHints();
+    renderServiceReminders();
 };
 
-// Handle Form Submits
+// Handle Fuel Form Submit
 if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -696,6 +972,7 @@ if (form) {
     });
 }
 
+// Handle Maintenance Form Submit (Create & Edit)
 if (maintForm) {
     maintForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -703,12 +980,12 @@ if (maintForm) {
         const origText = maintSubmitBtn ? maintSubmitBtn.textContent : 'Save Record';
         if (maintSubmitBtn) {
             maintSubmitBtn.disabled = true;
-            maintSubmitBtn.textContent = 'Saving...';
+            maintSubmitBtn.textContent = editingMaintId ? 'Updating...' : 'Saving...';
         }
 
         try {
             const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-            const newRecord = {
+            const recordData = {
                 date: maintDateInput.value,
                 odometer: parseFloat(maintOdoInput.value),
                 type: maintTypeInput.value,
@@ -717,7 +994,14 @@ if (maintForm) {
                 profile: currentProfileName
             };
 
-            await addDoc(collection(db, "maintRecords"), newRecord);
+            if (editingMaintId) {
+                await setDoc(doc(db, "maintRecords", editingMaintId), recordData);
+                editingMaintId = null;
+                if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600"></i> Log Maintenance';
+                if (maintCancelEditBtn) maintCancelEditBtn.classList.add('hidden');
+            } else {
+                await addDoc(collection(db, "maintRecords"), recordData);
+            }
             
             maintOdoInput.value = '';
             maintCostInput.value = '';
@@ -729,7 +1013,7 @@ if (maintForm) {
                 maintSubmitBtn.classList.replace('bg-orange-600', 'bg-green-600');
                 setTimeout(() => {
                     maintSubmitBtn.disabled = false;
-                    maintSubmitBtn.textContent = origText;
+                    maintSubmitBtn.textContent = 'Save Record';
                     maintSubmitBtn.classList.replace('bg-green-600', 'bg-orange-600');
                 }, 1200);
             }
@@ -775,13 +1059,16 @@ onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     syncProfilesFromRecords();
     renderTable();
+    renderServiceReminders();
 });
 
 onSnapshot(collection(db, "maintRecords"), (snapshot) => {
     maintRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     syncProfilesFromRecords();
     renderMaintenanceTable();
+    renderServiceReminders();
 });
 
 renderProfiles();
 updateOdometerHints();
+renderServiceReminders();

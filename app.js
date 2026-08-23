@@ -99,7 +99,7 @@ if (!profiles.includes(activeProfile)) {
 
 // Helper: Format Currency
 const formatCurrency = (amount) => {
-    return `₱${Number(amount).toFixed(2)}`;
+    return \?\\;
 };
 
 // Helper: Format Number
@@ -160,7 +160,7 @@ cancelEditBtn.addEventListener('click', () => {
     editingId = null;
     form.reset();
     dateInput.valueAsDate = new Date();
-    calculatedTotal.textContent = '₱0.00';
+    calculatedTotal.textContent = '?0.00';
     submitBtn.textContent = 'Save Record';
     cancelEditBtn.classList.add('hidden');
 });
@@ -301,8 +301,8 @@ const processRecords = (data) => {
 const updateStats = (processedData) => {
     if (processedData.length < 2) {
         statAvgEconomy.textContent = "-- km/L";
-        statAvgCost.textContent = "₱--";
-        stat30dCost.textContent = "₱--";
+        statAvgCost.textContent = "?--";
+        stat30dCost.textContent = "?--";
         statTotalDist.textContent = "-- km";
         return;
     }
@@ -328,10 +328,10 @@ const updateStats = (processedData) => {
     const totalMaintAmount = profileMaint.reduce((sum, r) => sum + r.cost, 0);
     const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
 
-    statAvgEconomy.textContent = `${formatNumber(avgEconomy)} km/L`;
+    statAvgEconomy.textContent = \\ km/L\;
     statAvgCost.textContent = formatCurrency(fuelCostPerKm);
     stat30dCost.textContent = formatCurrency(trueCostPerKm);
-    statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
+    statTotalDist.textContent = \\ km\;
 };
 
 // Render Tables
@@ -362,25 +362,25 @@ const renderTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.tripKm ? row.tripKm : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatNumber(row.liters)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatCurrency(row.pricePerLiter)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">${row.pesoPerKm ? formatCurrency(row.pesoPerKm) : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter ? formatNumber(row.kmPerLiter) : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.pesosIn30Days ? formatCurrency(row.pesosIn30Days) : '-'}</td>
+        tr.innerHTML = \
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">\</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
+                <button onclick="editRecord('\')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
-                <button onclick="deleteRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteRecord('\')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
-        `;
+        \;
         historyTableBody.appendChild(tr);
     });
 
@@ -410,18 +410,18 @@ const renderMaintenanceTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${row.type}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.notes || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">${formatCurrency(row.cost)}</td>
+        tr.innerHTML = \
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">\</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteMaintRecord('\')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
-        `;
+        \;
         maintTableBody.appendChild(tr);
     });
     lucide.createIcons();
@@ -455,7 +455,7 @@ form.addEventListener('submit', async (e) => {
     odometerInput.value = '';
     litersInput.value = '';
     priceInput.value = '';
-    calculatedTotal.textContent = '₱0.00';
+    calculatedTotal.textContent = '?0.00';
 });
 
 maintForm.addEventListener('submit', async (e) => {
@@ -478,7 +478,7 @@ maintForm.addEventListener('submit', async (e) => {
 
 // Clear All Data
 clearDataBtn.addEventListener('click', async () => {
-    if(confirm(`Are you sure you want to delete ALL records for ${activeProfile}? This cannot be undone.`)) {
+    if(confirm(\Are you sure you want to delete ALL records for \? This cannot be undone.\)) {
         const batch = writeBatch(db);
         
         const profileFuel = records.filter(r => r.profile === activeProfile);
@@ -495,29 +495,37 @@ clearDataBtn.addEventListener('click', async () => {
     }
 });
 
-// ONE-TIME MIGRATION: LocalStorage -> Firestore
-const migrateData = async () => {
-    const localFuel = JSON.parse(localStorage.getItem('fuelRecords'));
-    const localMaint = JSON.parse(localStorage.getItem('fuelMaintRecords'));
+// SEED DATA
+const seedData = async () => {
+    if (localStorage.getItem('hasSeededData3')) return;
     
-    if (localFuel && localFuel.length > 0 && records.length === 0) {
-        console.log("Migrating local fuel records to Firestore...");
-        for (const record of localFuel) {
-            const { id, ...dataToSave } = record;
-            await addDoc(collection(db, "fuelRecords"), dataToSave);
-        }
-        localStorage.removeItem('fuelRecords');
-    }
+    const rawData = [
+      { date: '2025-11-08', odometer: 4084, liters: 4.57, pricePerLiter: 55.90, profile: 'ADV 150' },
+      { date: '2025-11-22', odometer: 4226, liters: 5.34, pricePerLiter: 57.60, profile: 'ADV 150' },
+      { date: '2025-12-06', odometer: 4346, liters: 4.35, pricePerLiter: 55.40, profile: 'ADV 150' },
+      { date: '2025-12-19', odometer: 4494, liters: 5.28, pricePerLiter: 56.60, profile: 'ADV 150' },
+      { date: '2026-01-02', odometer: 4634, liters: 4.61, pricePerLiter: 53.90, profile: 'ADV 150' },
+      { date: '2026-01-15', odometer: 4788, liters: 4.86, pricePerLiter: 54.10, profile: 'ADV 150' },
+      { date: '2026-01-27', odometer: 4939, liters: 4.76, pricePerLiter: 53.60, profile: 'ADV 150' },
+      { date: '2026-02-15', odometer: 5110, liters: 6.11, pricePerLiter: 53.60, profile: 'ADV 150' },
+      { date: '2026-03-03', odometer: 5280, liters: 5.31, pricePerLiter: 54.90, profile: 'ADV 150' },
+      { date: '2026-03-13', odometer: 5394, liters: 3.99, pricePerLiter: 67.70, profile: 'ADV 150' },
+      { date: '2026-03-25', odometer: 5546, liters: 4.69, pricePerLiter: 91.20, profile: 'ADV 150' },
+      { date: '2026-04-17', odometer: 5710, liters: 4.92, pricePerLiter: 84.40, profile: 'ADV 150' },
+      { date: '2026-05-03', odometer: 5875, liters: 5.1, pricePerLiter: 78.50, profile: 'ADV 150' },
+      { date: '2026-05-20', odometer: 6044, liters: 5.08, pricePerLiter: 80.40, profile: 'ADV 150' }
+    ];
 
-    if (localMaint && localMaint.length > 0 && maintRecords.length === 0) {
-        console.log("Migrating local maint records to Firestore...");
-        for (const record of localMaint) {
-            const { id, ...dataToSave } = record;
-            await addDoc(collection(db, "maintRecords"), dataToSave);
+    for (const record of rawData) {
+        // Only add if not already in records
+        const exists = records.some(r => r.date === record.date && r.odometer === record.odometer);
+        if (!exists) {
+            await addDoc(collection(db, "fuelRecords"), record);
         }
-        localStorage.removeItem('fuelMaintRecords');
     }
+    localStorage.setItem('hasSeededData3', 'true');
 };
+
 
 // REAL-TIME LISTENERS
 let migrationCheckDone = false;
@@ -528,7 +536,7 @@ onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     
     if (!migrationCheckDone) {
         migrationCheckDone = true;
-        migrateData();
+        seedData();
     }
 });
 

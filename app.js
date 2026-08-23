@@ -62,6 +62,7 @@ const maintCostInput = document.getElementById('maint-cost');
 const maintNotesInput = document.getElementById('maint-notes');
 const maintTableBody = document.getElementById('maint-table-body');
 const maintEmptyState = document.getElementById('maint-empty-state');
+const maintSubmitBtn = maintForm ? maintForm.querySelector('button[type="submit"]') : null;
 
 // State
 let records = [];
@@ -197,13 +198,21 @@ window.editRecord = (id) => {
 
 window.deleteRecord = async (id) => {
     if (confirm('Are you sure you want to delete this record?')) {
-        await deleteDoc(doc(db, "fuelRecords", id));
+        try {
+            await deleteDoc(doc(db, "fuelRecords", id));
+        } catch (err) {
+            alert('Failed to delete record: ' + err.message);
+        }
     }
 };
 
 window.deleteMaintRecord = async (id) => {
     if (confirm('Are you sure you want to delete this maintenance record?')) {
-        await deleteDoc(doc(db, "maintRecords", id));
+        try {
+            await deleteDoc(doc(db, "maintRecords", id));
+        } catch (err) {
+            alert('Failed to delete maintenance record: ' + err.message);
+        }
     }
 };
 
@@ -454,47 +463,94 @@ if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const recordData = {
-            date: dateInput.value,
-            odometer: parseFloat(odometerInput.value),
-            liters: parseFloat(litersInput.value),
-            pricePerLiter: parseFloat(priceInput.value),
-            profile: activeProfile
-        };
+        const originalBtnText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = editingId ? 'Updating...' : 'Saving...';
 
-        if (editingId) {
-            await setDoc(doc(db, "fuelRecords", editingId), recordData);
-            editingId = null;
-            submitBtn.textContent = 'Save Record';
-            cancelEditBtn.classList.add('hidden');
-        } else {
-            await addDoc(collection(db, "fuelRecords"), recordData);
+        try {
+            const recordData = {
+                date: dateInput.value,
+                odometer: parseFloat(odometerInput.value),
+                liters: parseFloat(litersInput.value),
+                pricePerLiter: parseFloat(priceInput.value),
+                profile: activeProfile
+            };
+
+            if (editingId) {
+                await setDoc(doc(db, "fuelRecords", editingId), recordData);
+                editingId = null;
+                cancelEditBtn.classList.add('hidden');
+            } else {
+                await addDoc(collection(db, "fuelRecords"), recordData);
+            }
+
+            odometerInput.value = '';
+            litersInput.value = '';
+            priceInput.value = '';
+            calculatedTotal.textContent = '₱0.00';
+            dateInput.valueAsDate = new Date();
+
+            submitBtn.textContent = 'Saved!';
+            submitBtn.classList.replace('bg-blue-600', 'bg-green-600');
+            setTimeout(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Save Record';
+                submitBtn.classList.replace('bg-green-600', 'bg-blue-600');
+            }, 1200);
+
+        } catch (err) {
+            console.error("Error saving fuel record:", err);
+            alert("Error saving record: " + err.message);
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalBtnText;
         }
-
-        odometerInput.value = '';
-        litersInput.value = '';
-        priceInput.value = '';
-        calculatedTotal.textContent = '₱0.00';
     });
 }
 
 if (maintForm) {
     maintForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const newRecord = {
-            date: maintDateInput.value,
-            odometer: parseFloat(maintOdoInput.value),
-            type: maintTypeInput.value,
-            cost: parseFloat(maintCostInput.value),
-            notes: maintNotesInput.value,
-            profile: activeProfile
-        };
-
-        await addDoc(collection(db, "maintRecords"), newRecord);
         
-        maintOdoInput.value = '';
-        maintCostInput.value = '';
-        maintNotesInput.value = '';
+        const origText = maintSubmitBtn ? maintSubmitBtn.textContent : 'Save Record';
+        if (maintSubmitBtn) {
+            maintSubmitBtn.disabled = true;
+            maintSubmitBtn.textContent = 'Saving...';
+        }
+
+        try {
+            const newRecord = {
+                date: maintDateInput.value,
+                odometer: parseFloat(maintOdoInput.value),
+                type: maintTypeInput.value,
+                cost: parseFloat(maintCostInput.value),
+                notes: maintNotesInput.value,
+                profile: activeProfile
+            };
+
+            await addDoc(collection(db, "maintRecords"), newRecord);
+            
+            maintOdoInput.value = '';
+            maintCostInput.value = '';
+            maintNotesInput.value = '';
+            maintDateInput.valueAsDate = new Date();
+
+            if (maintSubmitBtn) {
+                maintSubmitBtn.textContent = 'Saved!';
+                maintSubmitBtn.classList.replace('bg-orange-600', 'bg-green-600');
+                setTimeout(() => {
+                    maintSubmitBtn.disabled = false;
+                    maintSubmitBtn.textContent = origText;
+                    maintSubmitBtn.classList.replace('bg-green-600', 'bg-orange-600');
+                }, 1200);
+            }
+        } catch (err) {
+            console.error("Error saving maintenance record:", err);
+            alert("Error saving maintenance record: " + err.message);
+            if (maintSubmitBtn) {
+                maintSubmitBtn.disabled = false;
+                maintSubmitBtn.textContent = origText;
+            }
+        }
     });
 }
 
@@ -502,19 +558,23 @@ if (maintForm) {
 if (clearDataBtn) {
     clearDataBtn.addEventListener('click', async () => {
         if (confirm(`Are you sure you want to delete ALL records for ${activeProfile}? This cannot be undone.`)) {
-            const batch = writeBatch(db);
-            
-            const profileFuel = records.filter(r => r.profile === activeProfile);
-            profileFuel.forEach(r => {
-                batch.delete(doc(db, "fuelRecords", r.id));
-            });
+            try {
+                const batch = writeBatch(db);
+                
+                const profileFuel = records.filter(r => r.profile === activeProfile);
+                profileFuel.forEach(r => {
+                    batch.delete(doc(db, "fuelRecords", r.id));
+                });
 
-            const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
-            profileMaint.forEach(r => {
-                batch.delete(doc(db, "maintRecords", r.id));
-            });
+                const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
+                profileMaint.forEach(r => {
+                    batch.delete(doc(db, "maintRecords", r.id));
+                });
 
-            await batch.commit();
+                await batch.commit();
+            } catch (err) {
+                alert("Failed to clear data: " + err.message);
+            }
         }
     });
 }

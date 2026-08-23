@@ -67,8 +67,17 @@ const maintSubmitBtn = maintForm ? maintForm.querySelector('button[type="submit"
 // State
 let records = [];
 let maintRecords = [];
-let profiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
+
+// Load and migrate profiles (e.g. Cherry -> Chery)
+let loadedProfiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
+let profiles = [...new Set(loadedProfiles.map(p => p === 'Cherry' ? 'Chery' : p))];
+if (!profiles.includes('ADV 150')) profiles.unshift('ADV 150');
+
 let activeProfile = localStorage.getItem('activeProfile') || 'ADV 150';
+if (activeProfile === 'Cherry') activeProfile = 'Chery';
+
+localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
+localStorage.setItem('activeProfile', activeProfile);
 
 if (maintDateInput) maintDateInput.valueAsDate = new Date();
 if (dateInput) dateInput.valueAsDate = new Date();
@@ -92,12 +101,6 @@ if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
         viewMaintenance.classList.remove('hidden');
         viewFuel.classList.add('hidden');
     });
-}
-
-// Ensure active profile is in list
-if (!profiles.includes(activeProfile)) {
-    profiles.push(activeProfile);
-    localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
 }
 
 // Helper: Format Currency
@@ -125,6 +128,33 @@ const renderProfiles = () => {
     });
 };
 
+// Auto-sync profile list from database records
+const syncProfilesFromRecords = () => {
+    let changed = false;
+    records.forEach(r => {
+        if (r.profile) {
+            const p = r.profile === 'Cherry' ? 'Chery' : r.profile;
+            if (!profiles.includes(p)) {
+                profiles.push(p);
+                changed = true;
+            }
+        }
+    });
+    maintRecords.forEach(r => {
+        if (r.profile) {
+            const p = r.profile === 'Cherry' ? 'Chery' : r.profile;
+            if (!profiles.includes(p)) {
+                profiles.push(p);
+                changed = true;
+            }
+        }
+    });
+    if (changed) {
+        localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
+        renderProfiles();
+    }
+};
+
 // Calculate total amount in form on input change
 const calculateFormTotal = () => {
     if (!calculatedTotal) return;
@@ -150,9 +180,10 @@ if (profileSelect) {
 // Handle Add Profile
 if (addProfileBtn) {
     addProfileBtn.addEventListener('click', () => {
-        const newProfile = prompt('Enter new vehicle name (e.g. Civic, NMAX):');
+        const newProfile = prompt('Enter new vehicle name (e.g. Chery, Civic, NMAX):');
         if (newProfile && newProfile.trim() !== '') {
-            const trimmed = newProfile.trim();
+            let trimmed = newProfile.trim();
+            if (trimmed.toLowerCase() === 'cherry') trimmed = 'Chery';
             if (!profiles.includes(trimmed)) {
                 profiles.push(trimmed);
                 localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
@@ -347,7 +378,8 @@ const updateStats = (processedData) => {
     const firstRecord = processedData[0];
     const totalDistance = latestRecord.odometer - firstRecord.odometer;
 
-    const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
     const totalMaintAmount = profileMaint.reduce((sum, r) => sum + (r.cost || 0), 0);
     const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
 
@@ -361,7 +393,8 @@ const updateStats = (processedData) => {
 const renderTable = () => {
     if (!historyTableBody) return;
     historyTableBody.innerHTML = '';
-    const profileRecords = records.filter(r => r.profile === activeProfile);
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
     const tableEl = document.querySelector('#view-fuel table');
     
     if (profileRecords.length === 0) {
@@ -417,7 +450,8 @@ const renderTable = () => {
 const renderMaintenanceTable = () => {
     if (!maintTableBody) return;
     maintTableBody.innerHTML = '';
-    const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
     const tableContainer = maintTableBody.closest('table');
     
     if (profileMaint.length === 0) {
@@ -435,7 +469,7 @@ const renderMaintenanceTable = () => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50';
         const dateObj = new Date(row.date);
-        const formattedDate = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
@@ -453,8 +487,8 @@ const renderMaintenanceTable = () => {
     });
     if (window.lucide) lucide.createIcons();
     
-    const profileRecords = records.filter(r => r.profile === activeProfile);
-    const processedData = processRecords(profileRecords);
+    const currentProfileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+    const processedData = processRecords(currentProfileRecords);
     updateStats(processedData);
 };
 
@@ -468,12 +502,13 @@ if (form) {
         submitBtn.textContent = editingId ? 'Updating...' : 'Saving...';
 
         try {
+            const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
             const recordData = {
                 date: dateInput.value,
                 odometer: parseFloat(odometerInput.value),
                 liters: parseFloat(litersInput.value),
                 pricePerLiter: parseFloat(priceInput.value),
-                profile: activeProfile
+                profile: currentProfileName
             };
 
             if (editingId) {
@@ -518,13 +553,14 @@ if (maintForm) {
         }
 
         try {
+            const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
             const newRecord = {
                 date: maintDateInput.value,
                 odometer: parseFloat(maintOdoInput.value),
                 type: maintTypeInput.value,
                 cost: parseFloat(maintCostInput.value),
                 notes: maintNotesInput.value,
-                profile: activeProfile
+                profile: currentProfileName
             };
 
             await addDoc(collection(db, "maintRecords"), newRecord);
@@ -557,16 +593,17 @@ if (maintForm) {
 // Clear All Data
 if (clearDataBtn) {
     clearDataBtn.addEventListener('click', async () => {
-        if (confirm(`Are you sure you want to delete ALL records for ${activeProfile}? This cannot be undone.`)) {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        if (confirm(`Are you sure you want to delete ALL records for ${currentProfileName}? This cannot be undone.`)) {
             try {
                 const batch = writeBatch(db);
                 
-                const profileFuel = records.filter(r => r.profile === activeProfile);
+                const profileFuel = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
                 profileFuel.forEach(r => {
                     batch.delete(doc(db, "fuelRecords", r.id));
                 });
 
-                const profileMaint = maintRecords.filter(r => r.profile === activeProfile);
+                const profileMaint = maintRecords.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
                 profileMaint.forEach(r => {
                     batch.delete(doc(db, "maintRecords", r.id));
                 });
@@ -582,11 +619,13 @@ if (clearDataBtn) {
 // REAL-TIME LISTENERS
 onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    syncProfilesFromRecords();
     renderTable();
 });
 
 onSnapshot(collection(db, "maintRecords"), (snapshot) => {
     maintRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    syncProfilesFromRecords();
     renderMaintenanceTable();
 });
 

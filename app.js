@@ -99,7 +99,7 @@ if (!profiles.includes(activeProfile)) {
 
 // Helper: Format Currency
 const formatCurrency = (amount) => {
-    return \?\\;
+    return `₱${Number(amount).toFixed(2)}`;
 };
 
 // Helper: Format Number
@@ -160,7 +160,7 @@ cancelEditBtn.addEventListener('click', () => {
     editingId = null;
     form.reset();
     dateInput.valueAsDate = new Date();
-    calculatedTotal.textContent = '?0.00';
+    calculatedTotal.textContent = '₱0.00';
     submitBtn.textContent = 'Save Record';
     cancelEditBtn.classList.add('hidden');
 });
@@ -301,8 +301,8 @@ const processRecords = (data) => {
 const updateStats = (processedData) => {
     if (processedData.length < 2) {
         statAvgEconomy.textContent = "-- km/L";
-        statAvgCost.textContent = "?--";
-        stat30dCost.textContent = "?--";
+        statAvgCost.textContent = "₱--";
+        stat30dCost.textContent = "₱--";
         statTotalDist.textContent = "-- km";
         return;
     }
@@ -328,10 +328,10 @@ const updateStats = (processedData) => {
     const totalMaintAmount = profileMaint.reduce((sum, r) => sum + r.cost, 0);
     const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
 
-    statAvgEconomy.textContent = \\ km/L\;
+    statAvgEconomy.textContent = `${formatNumber(avgEconomy)} km/L`;
     statAvgCost.textContent = formatCurrency(fuelCostPerKm);
     stat30dCost.textContent = formatCurrency(trueCostPerKm);
-    statTotalDist.textContent = \\ km\;
+    statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
 };
 
 // Render Tables
@@ -362,25 +362,25 @@ const renderTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
-        tr.innerHTML = \
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">\</td>
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.tripKm ? row.tripKm : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatNumber(row.liters)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatCurrency(row.pricePerLiter)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">${row.pesoPerKm ? formatCurrency(row.pesoPerKm) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter ? formatNumber(row.kmPerLiter) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.pesosIn30Days ? formatCurrency(row.pesosIn30Days) : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editRecord('\')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
+                <button onclick="editRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
-                <button onclick="deleteRecord('\')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
-        \;
+        `;
         historyTableBody.appendChild(tr);
     });
 
@@ -410,18 +410,18 @@ const renderMaintenanceTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-        tr.innerHTML = \
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">\</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">\</td>
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${row.type}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.notes || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">${formatCurrency(row.cost)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="deleteMaintRecord('\')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
-        \;
+        `;
         maintTableBody.appendChild(tr);
     });
     lucide.createIcons();
@@ -455,7 +455,7 @@ form.addEventListener('submit', async (e) => {
     odometerInput.value = '';
     litersInput.value = '';
     priceInput.value = '';
-    calculatedTotal.textContent = '?0.00';
+    calculatedTotal.textContent = '₱0.00';
 });
 
 maintForm.addEventListener('submit', async (e) => {
@@ -478,7 +478,7 @@ maintForm.addEventListener('submit', async (e) => {
 
 // Clear All Data
 clearDataBtn.addEventListener('click', async () => {
-    if(confirm(\Are you sure you want to delete ALL records for \? This cannot be undone.\)) {
+    if(confirm(`Are you sure you want to delete ALL records for ${activeProfile}? This cannot be undone.`)) {
         const batch = writeBatch(db);
         
         const profileFuel = records.filter(r => r.profile === activeProfile);

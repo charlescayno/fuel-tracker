@@ -136,7 +136,9 @@ let chartInstance = null;
 // Stats Elements
 const statAvgEconomy = document.getElementById('stat-avg-economy');
 const statAvgCost = document.getElementById('stat-avg-cost');
-const stat30dCost = document.getElementById('stat-30d-cost');
+const statMonthlyPesos = document.getElementById('stat-monthly-pesos');
+const statMonthlyLiters = document.getElementById('stat-monthly-liters');
+const statTrueCost = document.getElementById('stat-true-cost');
 const statTotalDist = document.getElementById('stat-total-dist');
 
 // Maintenance DOM Elements
@@ -211,13 +213,13 @@ if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
 // Helper: Format Currency
 const formatCurrency = (amount) => {
     if (amount === null || amount === undefined || isNaN(amount)) return '₱0.00';
-    return `₱${Number(amount).toFixed(2)}`;
+    return `₱${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 // Helper: Format Number
 const formatNumber = (num, decimals = 2) => {
     if (num === null || num === undefined || isNaN(num)) return '-';
-    return Number(num).toFixed(decimals);
+    return Number(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 };
 
 // Render Profiles Dropdown
@@ -319,7 +321,6 @@ const updateOdometerHints = () => {
 
 // ==================== SERVICE REMINDERS & HEALTH METERS ====================
 
-// Default Service Interval Definitions
 const defaultServices = [
     { id: 'oil_change', name: 'Oil Change', defaultInterval: 2000, icon: 'droplet', matchTypes: ['oil change', 'engine oil'] },
     { id: 'gear_oil', name: 'Gear Oil', defaultInterval: 4000, icon: 'disc', matchTypes: ['gear oil', 'transmission'] },
@@ -327,7 +328,6 @@ const defaultServices = [
     { id: 'brakes_tires', name: 'Brakes & Tires Inspection', defaultInterval: 5000, icon: 'shield', matchTypes: ['brakes', 'tires'] }
 ];
 
-// Get stored service config for active profile
 const getServicesConfig = () => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const key = `service_config_${currentProfileName}`;
@@ -342,14 +342,12 @@ const getServicesConfig = () => {
     return defaultServices;
 };
 
-// Save service config for active profile
 const saveServicesConfig = (config) => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const key = `service_config_${currentProfileName}`;
     localStorage.setItem(key, JSON.stringify(config));
 };
 
-// Global function to adjust service interval
 window.editServiceInterval = (serviceId) => {
     const config = getServicesConfig();
     const service = config.find(s => s.id === serviceId);
@@ -364,7 +362,6 @@ window.editServiceInterval = (serviceId) => {
     }
 };
 
-// Global function to quick-fill maintenance form from reminder card
 window.quickLogService = (serviceName) => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const currentOdo = getCurrentVehicleOdometer(currentProfileName);
@@ -372,7 +369,6 @@ window.quickLogService = (serviceName) => {
     if (maintDateInput) maintDateInput.valueAsDate = new Date();
     if (maintOdoInput) maintOdoInput.value = currentOdo > 0 ? currentOdo : '';
     
-    // Select service type in dropdown or add option
     if (maintTypeInput) {
         let found = false;
         for (let i = 0; i < maintTypeInput.options.length; i++) {
@@ -396,7 +392,6 @@ window.quickLogService = (serviceName) => {
     maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
-// Add Custom Service Reminder
 if (addCustomServiceBtn) {
     addCustomServiceBtn.addEventListener('click', () => {
         const name = prompt('Enter service name (e.g. Brake Fluid, Coolant Flush, Battery):');
@@ -416,7 +411,6 @@ if (addCustomServiceBtn) {
         });
         saveServicesConfig(config);
         
-        // Add to maintenance type dropdown if not exists
         if (maintTypeInput) {
             const opt = document.createElement('option');
             opt.value = name.trim();
@@ -428,7 +422,6 @@ if (addCustomServiceBtn) {
     });
 }
 
-// Render Preventative Maintenance Reminders
 const renderServiceReminders = () => {
     if (!serviceRemindersGrid) return;
     
@@ -447,7 +440,6 @@ const renderServiceReminders = () => {
     config.forEach(service => {
         const interval = service.defaultInterval;
         
-        // Find most recent maintenance record matching this service type
         const matchingLogs = profileMaint.filter(r => {
             if (!r.type) return false;
             const logType = r.type.toLowerCase();
@@ -514,7 +506,6 @@ const renderServiceReminders = () => {
                     </span>
                 </div>
 
-                <!-- Progress Bar -->
                 <div class="w-full bg-gray-200 rounded-full h-2 mb-2.5 overflow-hidden">
                     <div class="${progressBarColor} h-2 rounded-full transition-all duration-500" style="width: ${percentUsed}%;"></div>
                 </div>
@@ -538,7 +529,6 @@ const renderServiceReminders = () => {
     if (window.lucide) lucide.createIcons();
 };
 
-// Calculate total amount in form on input change
 const calculateFormTotal = () => {
     if (!calculatedTotal) return;
     const liters = parseFloat(litersInput.value) || 0;
@@ -550,7 +540,6 @@ const calculateFormTotal = () => {
 if (litersInput) litersInput.addEventListener('input', calculateFormTotal);
 if (priceInput) priceInput.addEventListener('input', calculateFormTotal);
 
-// Handle Profile Change
 if (profileSelect) {
     profileSelect.addEventListener('change', (e) => {
         activeProfile = e.target.value;
@@ -562,7 +551,6 @@ if (profileSelect) {
     });
 }
 
-// Handle Add Profile
 if (addProfileBtn) {
     addProfileBtn.addEventListener('click', () => {
         const newProfile = prompt('Enter new vehicle name (e.g. Chery, Civic, NMAX):');
@@ -584,7 +572,6 @@ if (addProfileBtn) {
     });
 }
 
-// Cancel Fuel Edit
 if (cancelEditBtn) {
     cancelEditBtn.addEventListener('click', () => {
         editingId = null;
@@ -596,7 +583,6 @@ if (cancelEditBtn) {
     });
 }
 
-// Make functions globally available for inline onclick handlers
 window.editRecord = (id) => {
     const record = records.find(r => r.id === id);
     if (!record) return;
@@ -624,7 +610,6 @@ window.deleteRecord = async (id) => {
     }
 };
 
-// Edit Maintenance Record
 window.editMaintRecord = (id) => {
     const record = maintRecords.find(r => r.id === id);
     if (!record) return;
@@ -644,7 +629,6 @@ window.editMaintRecord = (id) => {
     maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
-// Cancel Maintenance Edit
 if (maintCancelEditBtn) {
     maintCancelEditBtn.addEventListener('click', () => {
         editingMaintId = null;
@@ -667,7 +651,6 @@ window.deleteMaintRecord = async (id) => {
     }
 };
 
-// Update Efficiency Chart
 const updateChart = (processedData) => {
     const ctx = document.getElementById('efficiencyChart');
     if (!ctx) return;
@@ -717,7 +700,6 @@ const updateChart = (processedData) => {
     });
 };
 
-// Process records to calculate derived values
 const processRecords = (data) => {
     if (data.length === 0) return [];
     
@@ -771,12 +753,14 @@ const processRecords = (data) => {
 
 // Update Dashboard Stats
 const updateStats = (processedData) => {
-    if (!statAvgEconomy || !statAvgCost || !stat30dCost || !statTotalDist) return;
+    if (!statAvgEconomy || !statAvgCost || !statMonthlyPesos || !statMonthlyLiters || !statTrueCost || !statTotalDist) return;
 
     if (processedData.length < 2) {
         statAvgEconomy.textContent = "-- km/L";
         statAvgCost.textContent = "₱--";
-        stat30dCost.textContent = "₱--";
+        statMonthlyPesos.textContent = "₱--";
+        statMonthlyLiters.textContent = "-- L / month";
+        statTrueCost.textContent = "₱--";
         statTotalDist.textContent = "-- km";
         return;
     }
@@ -798,14 +782,35 @@ const updateStats = (processedData) => {
     const firstRecord = processedData[0];
     const totalDistance = latestRecord.odometer - firstRecord.odometer;
 
+    // Estimated 30-Day Monthly Fuel Consumption (Liters and Pesos)
+    const firstDate = new Date(firstRecord.date);
+    const latestDate = new Date(latestRecord.date);
+    const totalDays = Math.max(1, Math.round(Math.abs(latestDate - firstDate) / (1000 * 60 * 60 * 24)));
+    
+    let monthlyLiters = 0;
+    let monthlyPesos = 0;
+
+    if (totalDays > 0 && avgEconomy > 0) {
+        const dailyKm = totalTripKm / totalDays;
+        const monthlyKm = dailyKm * 30;
+        monthlyLiters = monthlyKm / avgEconomy;
+        const avgPricePerLiter = totalLiters > 0 ? (totalAmount / totalLiters) : (latestRecord.pricePerLiter || 0);
+        monthlyPesos = monthlyLiters * avgPricePerLiter;
+    } else if (latestRecord.pesosIn30Days) {
+        monthlyPesos = latestRecord.pesosIn30Days;
+        monthlyLiters = latestRecord.litersIn30Days || 0;
+    }
+
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
     const totalMaintAmount = profileMaint.reduce((sum, r) => sum + (r.cost || 0), 0);
     const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
 
     statAvgEconomy.textContent = `${formatNumber(avgEconomy)} km/L`;
-    statAvgCost.textContent = formatCurrency(fuelCostPerKm);
-    stat30dCost.textContent = formatCurrency(trueCostPerKm);
+    statAvgCost.textContent = `${formatCurrency(fuelCostPerKm)}/km`;
+    statMonthlyPesos.textContent = formatCurrency(monthlyPesos);
+    statMonthlyLiters.textContent = `~${formatNumber(monthlyLiters)} L / month (30d)`;
+    statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
     statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
 };
 
@@ -850,7 +855,10 @@ const renderTable = () => {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">${row.pesoPerKm !== null ? formatCurrency(row.pesoPerKm) : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50">
+                <div class="text-amber-900 font-bold">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</div>
+                <div class="text-[11px] text-gray-500 font-medium">${row.litersIn30Days !== null ? formatNumber(row.litersIn30Days) + ' L' : ''}</div>
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button onclick="editRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
@@ -922,7 +930,6 @@ const renderMaintenanceTable = () => {
     renderServiceReminders();
 };
 
-// Handle Fuel Form Submit
 if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -972,7 +979,6 @@ if (form) {
     });
 }
 
-// Handle Maintenance Form Submit (Create & Edit)
 if (maintForm) {
     maintForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1028,7 +1034,6 @@ if (maintForm) {
     });
 }
 
-// Clear All Data
 if (clearDataBtn) {
     clearDataBtn.addEventListener('click', async () => {
         const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
@@ -1054,7 +1059,7 @@ if (clearDataBtn) {
     });
 }
 
-// REAL-TIME LISTENERS (Works online and offline via IndexedDB cache)
+// REAL-TIME LISTENERS
 onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     syncProfilesFromRecords();

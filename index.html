@@ -68,7 +68,7 @@
                 <!-- Profile Selection & Install Button -->
                 <div class="flex items-center space-x-2 sm:space-x-3">
                     
-                    <!-- PWA Install Button (Shown on mobile/desktop browsers supporting PWA install) -->
+                    <!-- PWA Install Button -->
                     <button id="install-pwa-btn" class="hidden items-center text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-md font-medium transition-colors shadow-sm">
                         <i data-lucide="download" class="h-3.5 w-3.5 mr-1"></i>
                         <span>Install App</span>
@@ -99,7 +99,7 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         <!-- Dashboard Stats Row -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
             <!-- Avg Economy -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 flex items-center">
                 <div class="p-2.5 sm:p-3 rounded-xl bg-green-100 text-green-600 mr-3 sm:mr-4 shrink-0">
@@ -111,7 +111,7 @@
                 </div>
             </div>
             
-            <!-- Avg Cost per km -->
+            <!-- Avg Fuel Cost per km -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 flex items-center">
                 <div class="p-2.5 sm:p-3 rounded-xl bg-blue-100 text-blue-600 mr-3 sm:mr-4 shrink-0">
                     <i data-lucide="coins" class="h-5 w-5 sm:h-6 sm:w-6"></i>
@@ -122,14 +122,26 @@
                 </div>
             </div>
 
-            <!-- Est 30 Day Cost -->
+            <!-- Est Monthly (30d) Cost in Pesos & Liters -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 flex items-center col-span-2 sm:col-span-1">
+                <div class="p-2.5 sm:p-3 rounded-xl bg-amber-100 text-amber-600 mr-3 sm:mr-4 shrink-0">
+                    <i data-lucide="calendar" class="h-5 w-5 sm:h-6 sm:w-6"></i>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-xs sm:text-sm font-medium text-gray-500 truncate">Est. Monthly (30d)</p>
+                    <p class="text-lg sm:text-2xl font-bold text-amber-600" id="stat-monthly-pesos">₱--</p>
+                    <p class="text-xs text-gray-500 font-medium truncate" id="stat-monthly-liters">-- L / month</p>
+                </div>
+            </div>
+
+            <!-- True Cost per km (Fuel + Maintenance) -->
             <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 flex items-center">
                 <div class="p-2.5 sm:p-3 rounded-xl bg-orange-100 text-orange-600 mr-3 sm:mr-4 shrink-0">
-                    <i data-lucide="calendar-days" class="h-5 w-5 sm:h-6 sm:w-6"></i>
+                    <i data-lucide="calculator" class="h-5 w-5 sm:h-6 sm:w-6"></i>
                 </div>
                 <div class="min-w-0">
                     <p class="text-xs sm:text-sm font-medium text-gray-500 truncate">True Cost/km</p>
-                    <p class="text-lg sm:text-2xl font-bold text-gray-900" id="stat-30d-cost">₱--</p>
+                    <p class="text-lg sm:text-2xl font-bold text-gray-900" id="stat-true-cost">₱--</p>
                 </div>
             </div>
 
@@ -274,7 +286,7 @@
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Amount</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-blue-50">₱/km</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-green-50">km/L</th>
-                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">30d Est (₱)</th>
+                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-amber-50">30d Est (L / ₱)</th>
                                         <th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
                                     </tr>
                                 </thead>
@@ -445,7 +457,7 @@
 
     </main>
 
-    <script type="module" src="app.js?v=3.1"></script>
+    <script type="module" src="app.js?v=3.2"></script>
     <script>
         // Initialize Lucide icons on initial load
         lucide.createIcons();

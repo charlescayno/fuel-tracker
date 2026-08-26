@@ -47,7 +47,6 @@ if ('serviceWorker' in navigator) {
 // ==================== GLOBAL STATE ====================
 let records = [];
 let maintRecords = [];
-let tripRecords = [];
 let editingId = null;
 let editingMaintId = null;
 let chartInstance = null;
@@ -65,13 +64,6 @@ let routePinB = null;
 let markerPinA = null;
 let markerPinB = null;
 let routeGeoJsonLayer = null;
-
-// Route & Travel Time Calculation State
-let currentRouteData = null;
-let stopwatchInterval = null;
-let tripStartTime = null;
-let recordedActualSec = 0;
-let isTripRunning = false;
 
 // Profiles
 let loadedProfiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
@@ -195,30 +187,10 @@ const presetRouteSelect = document.getElementById('preset-route-select');
 const resetRouteBtn = document.getElementById('reset-route-btn');
 const routeRoundTripCheck = document.getElementById('route-roundtrip-check');
 const routeDistanceVal = document.getElementById('route-distance-val');
-const routeTimeVal = document.getElementById('route-time-val');
-const routeTrafficTimeVal = document.getElementById('route-traffic-time-val');
-const routeEtaVal = document.getElementById('route-eta-val');
 const routeFuelVal = document.getElementById('route-fuel-val');
 const routeTankPctVal = document.getElementById('route-tank-pct-val');
 const routeCostVal = document.getElementById('route-cost-val');
 const routeRefuelWarning = document.getElementById('route-refuel-warning');
-
-// Live Trip Tracker & Actual Travel Time Elements
-const tripLiveStatusBadge = document.getElementById('trip-live-status-badge');
-const tripStopwatchDisplay = document.getElementById('trip-stopwatch-display');
-const tripStopwatchHint = document.getElementById('trip-stopwatch-hint');
-const startTripBtn = document.getElementById('start-trip-btn');
-const finishTripBtn = document.getElementById('finish-trip-btn');
-const actualTripSummary = document.getElementById('actual-trip-summary');
-const actualRecordedTimeVal = document.getElementById('actual-recorded-time-val');
-const actualTimeDiffVal = document.getElementById('actual-time-diff-val');
-const manualActualHrs = document.getElementById('manual-actual-hrs');
-const manualActualMins = document.getElementById('manual-actual-mins');
-const saveTripLogBtn = document.getElementById('save-trip-log-btn');
-
-// Trips History Table Elements
-const tripsTableBody = document.getElementById('trips-table-body');
-const tripsEmptyState = document.getElementById('trips-empty-state');
 
 // Floating Canvas Search
 const mapQuickSearchInput = document.getElementById('map-quick-search-input');
@@ -235,30 +207,6 @@ const formatCurrency = (amount) => {
 const formatNumber = (num, decimals = 2) => {
     if (num === null || num === undefined || isNaN(num)) return '-';
     return Number(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-};
-
-const formatDuration = (totalSec) => {
-    if (!totalSec || totalSec <= 0) return '0 min';
-    const hrs = Math.floor(totalSec / 3600);
-    const mins = Math.round((totalSec % 3600) / 60);
-    if (hrs > 0) {
-        return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
-    }
-    return `${Math.max(1, mins)}m`;
-};
-
-const formatDurationFull = (totalSec) => {
-    if (!totalSec || totalSec <= 0) return '0 min';
-    const hrs = Math.floor(totalSec / 3600);
-    const mins = Math.round((totalSec % 3600) / 60);
-    if (hrs > 0) {
-        return mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
-    }
-    return `${Math.max(1, mins)} min`;
-};
-
-const formatTimeOfDay = (date) => {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 };
 
 // ==================== VEHICLE LOGOS ====================
@@ -642,15 +590,6 @@ const syncProfilesFromRecords = () => {
         }
     });
     maintRecords.forEach(r => {
-        if (r.profile) {
-            const p = r.profile === 'Cherry' ? 'Chery' : r.profile;
-            if (!profiles.includes(p)) {
-                profiles.push(p);
-                changed = true;
-            }
-        }
-    });
-    tripRecords.forEach(r => {
         if (r.profile) {
             const p = r.profile === 'Cherry' ? 'Chery' : r.profile;
             if (!profiles.includes(p)) {
@@ -1080,95 +1019,6 @@ const renderMaintenanceTable = () => {
     if (window.lucide) lucide.createIcons();
     updateOdometerHints();
     renderServiceReminders();
-};
-
-// ==================== RENDER RECORDED TRIPS & TRAVEL TIMES TABLE ====================
-const renderTripsTable = () => {
-    if (!tripsTableBody) return;
-    tripsTableBody.innerHTML = '';
-
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileTrips = tripRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
-    const tableContainer = tripsTableBody.closest('table');
-
-    if (profileTrips.length === 0) {
-        if (tripsEmptyState) tripsEmptyState.classList.remove('hidden');
-        if (tableContainer) tableContainer.classList.add('hidden');
-        return;
-    }
-
-    if (tripsEmptyState) tripsEmptyState.classList.add('hidden');
-    if (tableContainer) tableContainer.classList.remove('hidden');
-
-    const displayTrips = [...profileTrips].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    displayTrips.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
-        const dateObj = new Date(row.date);
-        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-        const formattedTime = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-
-        const estSec = row.estimatedSec || 0;
-        const actualSec = row.actualSec || 0;
-        const diffSec = actualSec - estSec;
-
-        let diffHtml = '<span class="text-gray-400 dark:text-slate-500">-</span>';
-        if (actualSec > 0 && estSec > 0) {
-            const diffMin = Math.round(diffSec / 60);
-            if (diffMin > 1) {
-                const pct = Math.round((diffSec / estSec) * 100);
-                diffHtml = `<span class="inline-flex items-center text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/60">+${diffMin}m (+${pct}%)</span>`;
-            } else if (diffMin < -1) {
-                diffHtml = `<span class="inline-flex items-center text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/60">${diffMin}m (Faster)</span>`;
-            } else {
-                diffHtml = `<span class="inline-flex items-center text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900/60">On Time</span>`;
-            }
-        }
-
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100">
-                <div class="font-medium">${formattedDate}</div>
-                <div class="text-[11px] text-gray-400 dark:text-slate-500">${formattedTime}</div>
-            </td>
-            <td class="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">
-                <div class="flex items-center space-x-1.5">
-                    <span>${row.origin || 'Start'}</span>
-                    <i data-lucide="arrow-right" class="h-3.5 w-3.5 text-blue-500 shrink-0 inline"></i>
-                    <span>${row.destination || 'Destination'}</span>
-                    ${row.isRoundTrip ? '<span class="ml-1 text-[10px] bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded font-bold">2-Way</span>' : ''}
-                </div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-gray-900 dark:text-white">${formatNumber(row.distanceKm, 1)} km</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 dark:text-blue-300 font-medium bg-blue-50/50 dark:bg-blue-950/20">${formatDuration(estSec)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 border-x border-emerald-100 dark:border-emerald-900/40">
-                ${actualSec > 0 ? formatDuration(actualSec) : '<span class="text-gray-400 font-normal">--</span>'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right">${diffHtml}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-white">
-                <div class="font-bold text-blue-600 dark:text-blue-400">${formatCurrency(row.tripCost)}</div>
-                <div class="text-[11px] text-gray-400 dark:text-slate-500">${formatNumber(row.fuelConsumed, 2)} L</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="deleteTripRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete Trip Record">
-                    <i data-lucide="trash-2" class="h-4 w-4"></i>
-                </button>
-            </td>
-        `;
-        tripsTableBody.appendChild(tr);
-    });
-
-    if (window.lucide) lucide.createIcons();
-};
-
-window.deleteTripRecord = async (id) => {
-    if (confirm('Delete this trip record?')) {
-        try {
-            await deleteDoc(doc(db, "tripRecords", id));
-        } catch (err) {
-            alert('Failed to delete trip record: ' + err.message);
-        }
-    }
 };
 
 // ==================== MAP MODULE (LEAFLET + NOMINATIM + OSRM) ====================
@@ -1807,7 +1657,6 @@ const fallbackStraightLineRoute = (lat1, lon1, lat2, lon2) => {
 const updateRouteResults = (distanceKm, durationSec) => {
     const isRoundTrip = routeRoundTripCheck ? routeRoundTripCheck.checked : false;
     const totalKm = isRoundTrip ? distanceKm * 2 : distanceKm;
-    const totalSec = isRoundTrip ? durationSec * 2 : durationSec;
 
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const specs = getVehicleSpecs(currentProfileName);
@@ -1819,31 +1668,7 @@ const updateRouteResults = (distanceKm, durationSec) => {
     const tripCost = fuelConsumed * latestPrice;
     const tankPctUsed = specs.tankCapacity > 0 ? ((fuelConsumed / specs.tankCapacity) * 100) : 0;
 
-    // Traffic calculation: Philippine congestion models (free-flow + 25% to 55% buffer)
-    const trafficLowSec = Math.round(totalSec * 1.25);
-    const trafficHighSec = Math.round(totalSec * 1.55);
-
-    // Current Time & ETA Window
-    const now = new Date();
-    const etaLow = new Date(now.getTime() + trafficLowSec * 1000);
-    const etaHigh = new Date(now.getTime() + trafficHighSec * 1000);
-
-    // Update Global Calculation Object
-    currentRouteData = {
-        distanceKm: totalKm,
-        estimatedSec: totalSec,
-        trafficLowSec: trafficLowSec,
-        trafficHighSec: trafficHighSec,
-        fuelConsumed: fuelConsumed,
-        tripCost: tripCost,
-        isRoundTrip: isRoundTrip
-    };
-
     if (routeDistanceVal) routeDistanceVal.textContent = `${formatNumber(totalKm, 1)} km ${isRoundTrip ? '(Round Trip)' : ''}`;
-    if (routeTimeVal) routeTimeVal.textContent = `~${formatDurationFull(totalSec)}`;
-    if (routeTrafficTimeVal) routeTrafficTimeVal.textContent = `~${formatDuration(trafficLowSec)} – ${formatDuration(trafficHighSec)}`;
-    if (routeEtaVal) routeEtaVal.textContent = `~${formatTimeOfDay(etaLow)} – ${formatTimeOfDay(etaHigh)}`;
-    
     if (routeFuelVal) routeFuelVal.textContent = `${formatNumber(fuelConsumed, 2)} Liters`;
     if (routeTankPctVal) routeTankPctVal.textContent = `${formatNumber(tankPctUsed, 1)}% of ${specs.tankCapacity}L Tank`;
     if (routeCostVal) routeCostVal.textContent = formatCurrency(tripCost);
@@ -1855,178 +1680,7 @@ const updateRouteResults = (distanceKm, durationSec) => {
             routeRefuelWarning.classList.add('hidden');
         }
     }
-
-    if (recordedActualSec > 0) {
-        updateActualTimeComparison();
-    }
 };
-
-// ==================== LIVE ACTUAL TRIP TRACKER & STOPWATCH ====================
-const updateStopwatchDisplay = (seconds) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    const formatted = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    if (tripStopwatchDisplay) tripStopwatchDisplay.textContent = formatted;
-};
-
-const updateActualTimeComparison = () => {
-    if (!currentRouteData || recordedActualSec <= 0) return;
-
-    if (actualRecordedTimeVal) {
-        actualRecordedTimeVal.textContent = formatDurationFull(recordedActualSec);
-    }
-
-    const estSec = currentRouteData.estimatedSec || 0;
-    const diffSec = recordedActualSec - estSec;
-    const diffMin = Math.round(diffSec / 60);
-
-    if (actualTimeDiffVal) {
-        if (estSec === 0) {
-            actualTimeDiffVal.textContent = 'Logged without route estimate';
-            actualTimeDiffVal.className = 'font-semibold text-gray-600 dark:text-slate-400';
-        } else if (diffMin > 1) {
-            const pct = Math.round((diffSec / estSec) * 100);
-            actualTimeDiffVal.innerHTML = `<span class="text-amber-600 dark:text-amber-400 font-bold">+${diffMin} min slower (+${pct}% delay)</span>`;
-        } else if (diffMin < -1) {
-            actualTimeDiffVal.innerHTML = `<span class="text-emerald-600 dark:text-emerald-400 font-bold">${diffMin} min faster than estimate</span>`;
-        } else {
-            actualTimeDiffVal.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-bold">On Schedule (±1 min)</span>`;
-        }
-    }
-};
-
-if (startTripBtn) {
-    startTripBtn.addEventListener('click', () => {
-        isTripRunning = true;
-        tripStartTime = Date.now();
-        
-        if (stopwatchInterval) clearInterval(stopwatchInterval);
-        
-        stopwatchInterval = setInterval(() => {
-            const elapsedSec = Math.floor((Date.now() - tripStartTime) / 1000);
-            updateStopwatchDisplay(elapsedSec);
-        }, 1000);
-
-        if (tripLiveStatusBadge) {
-            tripLiveStatusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1 inline-block"></span> In Progress';
-            tripLiveStatusBadge.className = 'text-[11px] bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800';
-        }
-
-        if (tripStopwatchHint) {
-            tripStopwatchHint.textContent = `Trip started at ${formatTimeOfDay(new Date())}`;
-        }
-
-        startTripBtn.disabled = true;
-        startTripBtn.classList.add('opacity-50', 'cursor-not-allowed');
-
-        if (finishTripBtn) {
-            finishTripBtn.disabled = false;
-            finishTripBtn.classList.remove('bg-gray-200', 'dark:bg-slate-800', 'text-gray-400', 'dark:text-slate-600', 'cursor-not-allowed');
-            finishTripBtn.classList.add('bg-orange-600', 'hover:bg-orange-700', 'text-white');
-        }
-
-        if (actualTripSummary) actualTripSummary.classList.add('hidden');
-    });
-}
-
-if (finishTripBtn) {
-    finishTripBtn.addEventListener('click', () => {
-        isTripRunning = false;
-        if (stopwatchInterval) clearInterval(stopwatchInterval);
-
-        const elapsedSec = tripStartTime ? Math.max(1, Math.floor((Date.now() - tripStartTime) / 1000)) : 0;
-        recordedActualSec = elapsedSec;
-
-        updateStopwatchDisplay(elapsedSec);
-
-        if (tripLiveStatusBadge) {
-            tripLiveStatusBadge.innerHTML = '<i data-lucide="check" class="h-3 w-3 inline mr-0.5"></i> Completed';
-            tripLiveStatusBadge.className = 'text-[11px] bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 font-bold px-2.5 py-0.5 rounded-full border border-blue-300 dark:border-blue-800';
-        }
-
-        if (tripStopwatchHint) {
-            tripStopwatchHint.textContent = `Finished at ${formatTimeOfDay(new Date())}`;
-        }
-
-        startTripBtn.disabled = false;
-        startTripBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        startTripBtn.innerHTML = '<i data-lucide="play" class="h-3.5 w-3.5 mr-1.5 fill-white"></i> Restart Trip';
-
-        finishTripBtn.disabled = true;
-        finishTripBtn.classList.add('bg-gray-200', 'dark:bg-slate-800', 'text-gray-400', 'dark:text-slate-600', 'cursor-not-allowed');
-        finishTripBtn.classList.remove('bg-orange-600', 'hover:bg-orange-700', 'text-white');
-
-        if (manualActualHrs) manualActualHrs.value = Math.floor(elapsedSec / 3600);
-        if (manualActualMins) manualActualMins.value = Math.round((elapsedSec % 3600) / 60);
-
-        updateActualTimeComparison();
-        if (actualTripSummary) actualTripSummary.classList.remove('hidden');
-        if (window.lucide) lucide.createIcons();
-    });
-}
-
-// Manual Hours and Mins Input listeners
-const handleManualActualTimeChange = () => {
-    const hrs = parseInt(manualActualHrs.value) || 0;
-    const mins = parseInt(manualActualMins.value) || 0;
-    recordedActualSec = (hrs * 3600) + (mins * 60);
-    updateStopwatchDisplay(recordedActualSec);
-    updateActualTimeComparison();
-};
-
-if (manualActualHrs) manualActualHrs.addEventListener('input', handleManualActualTimeChange);
-if (manualActualMins) manualActualMins.addEventListener('input', handleManualActualTimeChange);
-
-// Save Trip Record to Firestore Log
-if (saveTripLogBtn) {
-    saveTripLogBtn.addEventListener('click', async () => {
-        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-        const originStr = (routeOriginInput && routeOriginInput.value) ? routeOriginInput.value.split(',')[0].trim() : 'Point A';
-        const destStr = (routeDestInput && routeDestInput.value) ? routeDestInput.value.split(',')[0].trim() : 'Point B';
-
-        const tripData = {
-            date: new Date().toISOString(),
-            profile: currentProfileName,
-            origin: originStr,
-            destination: destStr,
-            originFull: routeOriginInput ? routeOriginInput.value : '',
-            destFull: routeDestInput ? routeDestInput.value : '',
-            distanceKm: currentRouteData ? currentRouteData.distanceKm : 0,
-            estimatedSec: currentRouteData ? currentRouteData.estimatedSec : 0,
-            actualSec: recordedActualSec > 0 ? recordedActualSec : (currentRouteData ? currentRouteData.estimatedSec : 0),
-            fuelConsumed: currentRouteData ? currentRouteData.fuelConsumed : 0,
-            tripCost: currentRouteData ? currentRouteData.tripCost : 0,
-            isRoundTrip: routeRoundTripCheck ? routeRoundTripCheck.checked : false
-        };
-
-        const origBtnText = saveTripLogBtn.innerHTML;
-        saveTripLogBtn.disabled = true;
-        saveTripLogBtn.innerHTML = '<i data-lucide="loader-2" class="h-3.5 w-3.5 mr-1.5 animate-spin"></i> Saving...';
-        if (window.lucide) lucide.createIcons();
-
-        try {
-            await addDoc(collection(db, "tripRecords"), tripData);
-            
-            saveTripLogBtn.innerHTML = '<i data-lucide="check" class="h-3.5 w-3.5 mr-1.5"></i> Saved to Trip Log!';
-            saveTripLogBtn.classList.replace('bg-blue-600', 'bg-emerald-600');
-            if (window.lucide) lucide.createIcons();
-
-            setTimeout(() => {
-                saveTripLogBtn.disabled = false;
-                saveTripLogBtn.innerHTML = origBtnText;
-                saveTripLogBtn.classList.replace('bg-emerald-600', 'bg-blue-600');
-                if (window.lucide) lucide.createIcons();
-            }, 1800);
-        } catch (err) {
-            console.error('Error saving trip log:', err);
-            alert('Error saving trip: ' + err.message);
-            saveTripLogBtn.disabled = false;
-            saveTripLogBtn.innerHTML = origBtnText;
-            if (window.lucide) lucide.createIcons();
-        }
-    });
-}
 
 // Preset destination routes dropdown
 if (presetRouteSelect) {
@@ -2059,8 +1713,6 @@ if (resetRouteBtn) {
     resetRouteBtn.addEventListener('click', () => {
         routePinA = null;
         routePinB = null;
-        currentRouteData = null;
-        recordedActualSec = 0;
         if (markerPinA && leafletMap) leafletMap.removeLayer(markerPinA);
         if (markerPinB && leafletMap) leafletMap.removeLayer(markerPinB);
         if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
@@ -2070,15 +1722,10 @@ if (resetRouteBtn) {
         if (routeDestClear) routeDestClear.classList.add('hidden');
         if (presetRouteSelect) presetRouteSelect.value = '';
         if (routeDistanceVal) routeDistanceVal.textContent = '-- km';
-        if (routeTimeVal) routeTimeVal.textContent = '--';
-        if (routeTrafficTimeVal) routeTrafficTimeVal.textContent = '--';
-        if (routeEtaVal) routeEtaVal.textContent = '--';
         if (routeFuelVal) routeFuelVal.textContent = '-- L';
         if (routeTankPctVal) routeTankPctVal.textContent = '--%';
         if (routeCostVal) routeCostVal.textContent = '₱0.00';
         if (routeRefuelWarning) routeRefuelWarning.classList.add('hidden');
-        if (actualTripSummary) actualTripSummary.classList.add('hidden');
-        updateStopwatchDisplay(0);
     });
 }
 
@@ -2173,7 +1820,6 @@ if (profileSelect) {
 
         renderTable();
         renderMaintenanceTable();
-        renderTripsTable();
         updateOdometerHints();
         renderServiceReminders();
         updateMapPanelDefaults();
@@ -2196,7 +1842,6 @@ if (addProfileBtn) {
             renderProfiles();
             renderTable();
             renderMaintenanceTable();
-            renderTripsTable();
             updateOdometerHints();
             renderServiceReminders();
             updateMapPanelDefaults();
@@ -2413,11 +2058,6 @@ if (clearDataBtn) {
                     batch.delete(doc(db, "maintRecords", r.id));
                 });
 
-                const profileTrips = tripRecords.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-                profileTrips.forEach(r => {
-                    batch.delete(doc(db, "tripRecords", r.id));
-                });
-
                 await batch.commit();
             } catch (err) {
                 alert("Failed to clear data: " + err.message);
@@ -2440,12 +2080,6 @@ onSnapshot(collection(db, "maintRecords"), (snapshot) => {
     syncProfilesFromRecords();
     renderMaintenanceTable();
     renderServiceReminders();
-});
-
-onSnapshot(collection(db, "tripRecords"), (snapshot) => {
-    tripRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    syncProfilesFromRecords();
-    renderTripsTable();
 });
 
 // ==================== INITIAL BOOTUP ====================

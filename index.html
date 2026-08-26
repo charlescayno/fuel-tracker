@@ -776,34 +776,12 @@
                                     </label>
                                 </div>
 
-                                <!-- Calculated Route Results Card with Estimated & Traffic Travel Times -->
+                                <!-- Calculated Route Results Card -->
                                 <div id="route-results-box" class="bg-blue-50/60 dark:bg-slate-950/80 rounded-xl p-4 border border-blue-100 dark:border-slate-800 space-y-3">
                                     
                                     <div class="flex justify-between items-center">
                                         <span class="text-xs text-gray-600 dark:text-slate-400 font-medium">Driving Distance:</span>
                                         <span id="route-distance-val" class="text-base font-bold text-gray-900 dark:text-white">-- km</span>
-                                    </div>
-
-                                    <!-- Travel Time Breakdown: Free-Flow vs Real Traffic vs ETA -->
-                                    <div class="bg-white/80 dark:bg-slate-900/80 rounded-lg p-3 border border-blue-100 dark:border-slate-800 space-y-2">
-                                        <div class="flex justify-between items-center text-xs">
-                                            <span class="text-gray-600 dark:text-slate-400 flex items-center font-medium">
-                                                <i data-lucide="clock" class="h-3.5 w-3.5 mr-1.5 text-blue-500"></i> Est. Time (Free Flow):
-                                            </span>
-                                            <span id="route-time-val" class="font-bold text-gray-900 dark:text-white">--</span>
-                                        </div>
-                                        <div class="flex justify-between items-center text-xs">
-                                            <span class="text-gray-600 dark:text-slate-400 flex items-center font-medium">
-                                                <i data-lucide="traffic-cone" class="h-3.5 w-3.5 mr-1.5 text-amber-500"></i> Typical PH Traffic:
-                                            </span>
-                                            <span id="route-traffic-time-val" class="font-bold text-amber-600 dark:text-amber-400">--</span>
-                                        </div>
-                                        <div class="flex justify-between items-center text-xs pt-1 border-t border-gray-100 dark:border-slate-800/80">
-                                            <span class="text-gray-600 dark:text-slate-400 flex items-center font-medium">
-                                                <i data-lucide="compass" class="h-3.5 w-3.5 mr-1.5 text-purple-500"></i> Est. Arrival (ETA):
-                                            </span>
-                                            <span id="route-eta-val" class="font-bold text-purple-600 dark:text-purple-400">--</span>
-                                        </div>
                                     </div>
 
                                     <!-- Fuel Consumed & Tank Pct -->
@@ -829,72 +807,6 @@
                                     <i data-lucide="alert-triangle" class="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400"></i>
                                     <span><strong>Refuel Stop Required!</strong> This trip exceeds your vehicle's single-tank range. Plan a fill-up along the way.</span>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Live Actual Trip Stopwatch & Actual Travel Time Tracker Box -->
-                        <div id="actual-trip-tracker-box" class="bg-white dark:bg-slate-900 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-slate-800 space-y-3.5">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center space-x-2">
-                                    <div class="p-1.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-lg">
-                                        <i data-lucide="timer" class="h-4 w-4"></i>
-                                    </div>
-                                    <h4 class="text-xs sm:text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Actual Trip Tracker</h4>
-                                </div>
-                                <span id="trip-live-status-badge" class="text-[11px] bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 font-semibold px-2.5 py-0.5 rounded-full border border-gray-200 dark:border-slate-700">
-                                    Ready
-                                </span>
-                            </div>
-
-                            <!-- Stopwatch Counter Display -->
-                            <div class="text-center py-3 bg-gray-50 dark:bg-slate-950 rounded-xl border border-gray-200 dark:border-slate-800 shadow-inner">
-                                <div class="text-3xl font-mono font-bold text-gray-900 dark:text-white tracking-wider" id="trip-stopwatch-display">00:00:00</div>
-                                <p class="text-[11px] text-gray-500 dark:text-slate-400 mt-1" id="trip-stopwatch-hint">Start stopwatch when you begin driving</p>
-                            </div>
-
-                            <!-- Stopwatch Controls -->
-                            <div class="grid grid-cols-2 gap-2.5" id="stopwatch-buttons">
-                                <button type="button" id="start-trip-btn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-lg transition-all flex items-center justify-center shadow-xs">
-                                    <i data-lucide="play" class="h-3.5 w-3.5 mr-1.5 fill-white"></i> Start Trip
-                                </button>
-                                <button type="button" id="finish-trip-btn" disabled class="bg-gray-200 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed text-xs font-bold py-2.5 px-3 rounded-lg transition-all flex items-center justify-center shadow-xs">
-                                    <i data-lucide="flag" class="h-3.5 w-3.5 mr-1.5"></i> Finish Trip
-                                </button>
-                            </div>
-
-                            <!-- Actual Travel Time Result & Manual Adjustment Form -->
-                            <div id="actual-trip-summary" class="hidden space-y-3 pt-3 border-t border-gray-200 dark:border-slate-800">
-                                <div class="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-xl p-3 text-xs space-y-2">
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-emerald-900 dark:text-emerald-300 font-semibold">Actual Travel Time:</span>
-                                        <strong class="text-base font-extrabold text-emerald-700 dark:text-emerald-400" id="actual-recorded-time-val">0h 0m</strong>
-                                    </div>
-                                    <div class="flex justify-between items-center text-[11px] pt-1.5 border-t border-emerald-200/60 dark:border-emerald-900/40">
-                                        <span class="text-emerald-800 dark:text-emerald-400 font-medium">Difference vs Est:</span>
-                                        <span class="font-bold" id="actual-time-diff-val">--</span>
-                                    </div>
-                                </div>
-
-                                <!-- Manual Time Input / Edit -->
-                                <div>
-                                    <label class="block text-[11px] font-semibold text-gray-600 dark:text-slate-400 mb-1">
-                                        Or Adjust Actual Travel Duration:
-                                    </label>
-                                    <div class="flex items-center space-x-2">
-                                        <div class="relative flex-1">
-                                            <input type="number" id="manual-actual-hrs" placeholder="0" min="0" max="99" class="w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-gray-900 dark:text-white px-3 py-1.5 text-center text-xs font-bold">
-                                            <span class="absolute right-2 top-1.5 text-[11px] text-gray-400">hr</span>
-                                        </div>
-                                        <div class="relative flex-1">
-                                            <input type="number" id="manual-actual-mins" placeholder="0" min="0" max="59" class="w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-gray-900 dark:text-white px-3 py-1.5 text-center text-xs font-bold">
-                                            <span class="absolute right-2 top-1.5 text-[11px] text-gray-400">min</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button type="button" id="save-trip-log-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 px-3 rounded-lg transition-colors flex items-center justify-center shadow-xs">
-                                    <i data-lucide="bookmark" class="h-4 w-4 mr-1.5"></i> Save Trip Record to Log
-                                </button>
                             </div>
                         </div>
 
@@ -935,53 +847,11 @@
 
             </div>
 
-            <!-- ==================== PAST TRIPS & ACTUAL TRAVEL TIME HISTORY TABLE ==================== -->
-            <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 overflow-hidden">
-                <div class="bg-gray-50 dark:bg-slate-950/80 px-6 py-4 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center">
-                    <div class="flex items-center space-x-2">
-                        <div class="p-2 bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-lg">
-                            <i data-lucide="history" class="h-5 w-5"></i>
-                        </div>
-                        <div>
-                            <h3 class="text-base sm:text-lg font-bold text-gray-900 dark:text-white">Recorded Trips & Travel Times</h3>
-                            <p class="text-xs text-gray-500 dark:text-slate-400">Compare Estimated vs. Actual driving times and fuel costs</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
-                        <thead class="bg-gray-50 dark:bg-slate-950">
-                            <tr>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Date</th>
-                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Route (From ➔ To)</th>
-                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Distance</th>
-                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap bg-blue-50/60 dark:bg-blue-950/20">Est. Time</th>
-                                <th scope="col" class="px-6 py-3 text-right text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider whitespace-nowrap bg-emerald-50 dark:bg-emerald-950/30 border-x border-emerald-100 dark:border-emerald-900/40">Actual Travel Time</th>
-                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Traffic Variance</th>
-                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Fuel (Cost)</th>
-                                <th scope="col" class="relative px-6 py-3"><span class="sr-only">Actions</span></th>
-                            </tr>
-                        </thead>
-                        <tbody id="trips-table-body" class="bg-white dark:bg-slate-900 divide-y divide-gray-200 dark:divide-slate-800">
-                            <!-- Rows will be inserted here via JS -->
-                        </tbody>
-                    </table>
-                </div>
-                
-                <!-- Empty State for Trips -->
-                <div id="trips-empty-state" class="hidden py-12 px-4 text-center">
-                    <i data-lucide="route" class="mx-auto h-12 w-12 text-gray-300 dark:text-slate-600 mb-3"></i>
-                    <h4 class="text-base font-medium text-gray-900 dark:text-white">No trip records logged yet</h4>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-slate-400">Plan a route above and click "Save Trip Record" to log your actual travel times!</p>
-                </div>
-            </div>
-
         </div> <!-- End view-map -->
 
     </main>
 
-    <script type="module" src="app.js?v=4.2"></script>
+    <script type="module" src="app.js?v=4.3"></script>
     <script>
         // Initialize Lucide icons on initial load
         lucide.createIcons();

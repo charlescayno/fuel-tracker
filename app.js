@@ -11,7 +11,7 @@ import {
     writeBatch
 } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-// Firebase configuration
+// ==================== FIREBASE INITIALIZATION ====================
 const firebaseConfig = {
   apiKey: "AIzaSyD4UD0AEyWMaQrJhicTBd-_162zMRjOG58",
   authDomain: "fuel-tracker-c565c.firebaseapp.com",
@@ -21,11 +21,10 @@ const firebaseConfig = {
   appId: "1:758052138447:web:650d2fe9a99d474bfab6ba"
 };
 
-// Initialize Firebase & Firestore
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Enable Firestore Offline IndexedDB Persistence
+// Enable Firestore Offline Persistence
 enableIndexedDbPersistence(db).catch((err) => {
     if (err.code === 'failed-precondition') {
         console.warn('Firestore persistence warning: Multiple tabs open.');
@@ -34,7 +33,7 @@ enableIndexedDbPersistence(db).catch((err) => {
     }
 });
 
-// Register Service Worker for PWA & Offline Caching
+// Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').then((reg) => {
@@ -45,115 +44,32 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// ==================== THEME (DARK / AMOLED & LIGHT) ====================
+// ==================== GLOBAL STATE ====================
+let records = [];
+let maintRecords = [];
+let editingId = null;
+let editingMaintId = null;
+let chartInstance = null;
+
+// Profiles
+let loadedProfiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
+let profiles = [...new Set(loadedProfiles.map(p => p === 'Cherry' ? 'Chery' : p))];
+if (!profiles.includes('ADV 150')) profiles.unshift('ADV 150');
+
+let activeProfile = localStorage.getItem('activeProfile') || 'ADV 150';
+if (activeProfile === 'Cherry') activeProfile = 'Chery';
+
+localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
+localStorage.setItem('activeProfile', activeProfile);
+
+// ==================== DOM ELEMENTS ====================
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const themeIcon = document.getElementById('theme-icon');
-
-const applyTheme = (theme) => {
-    const isDark = theme === 'dark';
-    if (isDark) {
-        document.documentElement.classList.add('dark');
-        if (themeIcon) {
-            themeIcon.setAttribute('data-lucide', 'sun');
-            themeToggleBtn.setAttribute('title', 'Switch to Light Mode');
-        }
-    } else {
-        document.documentElement.classList.remove('dark');
-        if (themeIcon) {
-            themeIcon.setAttribute('data-lucide', 'moon');
-            themeToggleBtn.setAttribute('title', 'Switch to Dark / AMOLED Mode');
-        }
-    }
-    localStorage.setItem('theme', theme);
-    if (window.lucide) lucide.createIcons();
-    
-    // Re-render chart to update gridlines and colors
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-    updateChart(processRecords(profileRecords));
-};
-
-// Initialize theme preference
-const savedTheme = localStorage.getItem('theme');
-if (savedTheme) {
-    applyTheme(savedTheme);
-} else {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    applyTheme(prefersDark ? 'dark' : 'light');
-}
-
-if (themeToggleBtn) {
-    themeToggleBtn.addEventListener('click', () => {
-        const isCurrentlyDark = document.documentElement.classList.contains('dark');
-        applyTheme(isCurrentlyDark ? 'light' : 'dark');
-    });
-}
-
-// PWA Install Prompt Handling
-let deferredInstallPrompt = null;
 const installPwaBtn = document.getElementById('install-pwa-btn');
-
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    if (installPwaBtn) {
-        installPwaBtn.classList.remove('hidden');
-        installPwaBtn.classList.add('flex');
-    }
-});
-
-if (installPwaBtn) {
-    installPwaBtn.addEventListener('click', async () => {
-        if (!deferredInstallPrompt) return;
-        deferredInstallPrompt.prompt();
-        const choiceResult = await deferredInstallPrompt.userChoice;
-        if (choiceResult.outcome === 'accepted') {
-            console.log('[PWA] User accepted installation');
-        }
-        deferredInstallPrompt = null;
-        installPwaBtn.classList.add('hidden');
-        installPwaBtn.classList.remove('flex');
-    });
-}
-
-window.addEventListener('appinstalled', () => {
-    console.log('[PWA] App successfully installed');
-    if (installPwaBtn) {
-        installPwaBtn.classList.add('hidden');
-        installPwaBtn.classList.remove('flex');
-    }
-});
-
-// Online / Offline Status Indicators
 const networkStatus = document.getElementById('network-status');
 const offlineBanner = document.getElementById('offline-banner');
 
-const updateOnlineStatus = () => {
-    const isOnline = navigator.onLine;
-    if (networkStatus) {
-        if (isOnline) {
-            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> Online';
-            networkStatus.className = 'flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5';
-        } else {
-            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span> Offline (Cached)';
-            networkStatus.className = 'flex items-center text-[10px] font-medium text-amber-600 dark:text-amber-400 mt-0.5';
-        }
-    }
-    if (offlineBanner) {
-        if (isOnline) {
-            offlineBanner.classList.add('hidden');
-        } else {
-            offlineBanner.classList.remove('hidden');
-        }
-    }
-    if (window.lucide) lucide.createIcons();
-};
-
-window.addEventListener('online', updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
-updateOnlineStatus();
-
-// DOM Elements - Fuel
+// Fuel Elements
 const form = document.getElementById('add-record-form');
 const dateInput = document.getElementById('date');
 const odometerInput = document.getElementById('odometer');
@@ -170,13 +86,13 @@ const addProfileBtn = document.getElementById('add-profile-btn');
 const cancelEditBtn = document.getElementById('cancel-edit-btn');
 const submitBtn = document.getElementById('submit-btn');
 
-// Last Odometer Hint Elements
+// Hints
 const lastOdoHint = document.getElementById('last-odo-hint');
 const lastDateHint = document.getElementById('last-date-hint');
 const maintLastOdoHint = document.getElementById('maint-last-odo-hint');
 const maintLastDateHint = document.getElementById('maint-last-date-hint');
 
-// Vehicle Specs, Logo & Range Estimator Elements
+// Specs Header
 const navbarVehicleLogo = document.getElementById('navbar-vehicle-logo');
 const vehicleLogoBadge = document.getElementById('vehicle-logo-badge');
 const specVehicleName = document.getElementById('spec-vehicle-name');
@@ -189,10 +105,7 @@ const specCostPerKm = document.getElementById('spec-cost-per-km');
 const editSpecsBtn = document.getElementById('edit-specs-btn');
 const litersPercentHint = document.getElementById('liters-percent-hint');
 
-let editingId = null;
-let chartInstance = null;
-
-// Stats Elements
+// Dashboard Stat Cards
 const statAvgEconomy = document.getElementById('stat-avg-economy');
 const statAvgCost = document.getElementById('stat-avg-cost');
 const statMonthlyPesos = document.getElementById('stat-monthly-pesos');
@@ -200,12 +113,13 @@ const statMonthlyLiters = document.getElementById('stat-monthly-liters');
 const statTrueCost = document.getElementById('stat-true-cost');
 const statTotalDist = document.getElementById('stat-total-dist');
 
-// Maintenance DOM Elements
+// Tabs & Views
 const tabFuel = document.getElementById('tab-fuel');
 const tabMaintenance = document.getElementById('tab-maintenance');
 const viewFuel = document.getElementById('view-fuel');
 const viewMaintenance = document.getElementById('view-maintenance');
 
+// Maintenance Elements
 const maintFormTitle = document.getElementById('maint-form-title');
 const maintForm = document.getElementById('add-maintenance-form');
 const maintDateInput = document.getElementById('maint-date');
@@ -218,18 +132,23 @@ const maintCancelEditBtn = document.getElementById('maint-cancel-edit-btn');
 const maintTableBody = document.getElementById('maint-table-body');
 const maintEmptyState = document.getElementById('maint-empty-state');
 
-// Service Reminders DOM Elements
+// Service Reminders
 const serviceRemindersGrid = document.getElementById('service-reminders-grid');
 const reminderCurrentOdo = document.getElementById('reminder-current-odo');
 const addCustomServiceBtn = document.getElementById('add-custom-service-btn');
 
-let editingMaintId = null;
+// ==================== FORMATTERS & HELPERS ====================
+const formatCurrency = (amount) => {
+    if (amount === null || amount === undefined || isNaN(amount)) return '₱0.00';
+    return `₱${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
-// State
-let records = [];
-let maintRecords = [];
+const formatNumber = (num, decimals = 2) => {
+    if (num === null || num === undefined || isNaN(num)) return '-';
+    return Number(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+};
 
-// ==================== VEHICLE LOGOS & ICONS ====================
+// ==================== VEHICLE LOGOS ====================
 const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
     const p = (profileName || '').toLowerCase();
     
@@ -251,7 +170,7 @@ const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
         `;
     }
 
-    // Yamaha (NMAX, Aerox, Mio, Sniper, R15, MT, etc.)
+    // Yamaha
     if (p.includes('yamaha') || p.includes('nmax') || p.includes('aerox') || p.includes('mio') || p.includes('sniper') || p.includes('tracer')) {
         return `
             <svg class="${cssClass} text-red-600" viewBox="0 0 100 100" fill="currentColor" xmlns="http://www.w3.org/2000/svg" title="Yamaha">
@@ -261,7 +180,7 @@ const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
         `;
     }
 
-    // Toyota (Vios, Fortuner, Innova, Hilux, Corolla, Raize, Wigo, etc.)
+    // Toyota
     if (p.includes('toyota') || p.includes('vios') || p.includes('fortuner') || p.includes('innova') || p.includes('hilux') || p.includes('raize') || p.includes('wigo') || p.includes('rush')) {
         return `
             <svg class="${cssClass} text-red-600" viewBox="0 0 100 70" fill="none" stroke="currentColor" stroke-width="6" xmlns="http://www.w3.org/2000/svg" title="Toyota">
@@ -272,7 +191,7 @@ const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
         `;
     }
 
-    // Default Motorcycle/Bike vs Car icon
+    // Default Motorcycle vs Car
     if (p.includes('bike') || p.includes('scooter') || p.includes('motor') || p.includes('150') || p.includes('125') || p.includes('160')) {
         return `
             <svg class="${cssClass} text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -294,7 +213,7 @@ const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
     `;
 };
 
-// ==================== VEHICLE SPECIFICATIONS & PRESETS ====================
+// ==================== VEHICLE SPECS & PRESETS ====================
 const defaultVehicleSpecs = {
     'ADV 150': {
         tankCapacity: 8.0,
@@ -337,6 +256,58 @@ const getVehicleSpecs = (profileName) => {
 const saveVehicleSpecs = (profileName, specs) => {
     const p = (profileName === 'Cherry') ? 'Chery' : profileName;
     localStorage.setItem(`vehicle_spec_${p}`, JSON.stringify(specs));
+};
+
+// ==================== PROCESS RECORDS ====================
+const processRecords = (data) => {
+    if (!data || data.length === 0) return [];
+    
+    const sortedData = [...data].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    return sortedData.map((record, index) => {
+        const amount = (record.liters || 0) * (record.pricePerLiter || 0);
+        
+        if (index === 0) {
+            return {
+                ...record,
+                amount,
+                tripKm: null,
+                pesoPerKm: null,
+                kmPerLiter: null,
+                daysInterval: null,
+                avgKmPerDay: null,
+                kmIn30Days: null,
+                litersIn30Days: null,
+                pesosIn30Days: null
+            };
+        }
+        
+        const prevRecord = sortedData[index - 1];
+        const tripKm = record.odometer - prevRecord.odometer;
+        const pesoPerKm = tripKm > 0 ? amount / tripKm : null;
+        const kmPerLiter = (record.liters > 0) ? tripKm / record.liters : null;
+        
+        const diffTime = Math.abs(new Date(record.date) - new Date(prevRecord.date));
+        const daysInterval = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        const avgKmPerDay = daysInterval > 0 ? tripKm / daysInterval : 0;
+        const kmIn30Days = avgKmPerDay * 30;
+        const litersIn30Days = kmPerLiter ? (kmIn30Days / kmPerLiter) : null;
+        const pesosIn30Days = (litersIn30Days && record.pricePerLiter) ? (litersIn30Days * record.pricePerLiter) : null;
+
+        return {
+            ...record,
+            amount,
+            tripKm,
+            pesoPerKm,
+            kmPerLiter,
+            daysInterval,
+            avgKmPerDay,
+            kmIn30Days,
+            litersIn30Days,
+            pesosIn30Days
+        };
+    });
 };
 
 const getVehicleAvgEconomy = (profileName) => {
@@ -473,66 +444,6 @@ if (editSpecsBtn) {
     });
 }
 
-// Load and migrate profiles (e.g. Cherry -> Chery)
-let loadedProfiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
-let profiles = [...new Set(loadedProfiles.map(p => p === 'Cherry' ? 'Chery' : p))];
-if (!profiles.includes('ADV 150')) profiles.unshift('ADV 150');
-
-let activeProfile = localStorage.getItem('activeProfile') || 'ADV 150';
-if (activeProfile === 'Cherry') activeProfile = 'Chery';
-
-localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
-localStorage.setItem('activeProfile', activeProfile);
-
-if (maintDateInput) maintDateInput.valueAsDate = new Date();
-if (dateInput) dateInput.valueAsDate = new Date();
-
-// Tab Switching Logic
-if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
-    tabFuel.addEventListener('click', () => {
-        tabFuel.classList.replace('border-transparent', 'border-blue-600');
-        tabFuel.classList.replace('text-gray-500', 'text-blue-600');
-        tabFuel.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
-        tabFuel.classList.add('font-semibold');
-        
-        tabMaintenance.classList.replace('border-blue-600', 'border-transparent');
-        tabMaintenance.classList.replace('text-blue-600', 'text-gray-500');
-        tabMaintenance.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
-        tabMaintenance.classList.remove('font-semibold');
-        
-        viewFuel.classList.remove('hidden');
-        viewMaintenance.classList.add('hidden');
-    });
-
-    tabMaintenance.addEventListener('click', () => {
-        tabMaintenance.classList.replace('border-transparent', 'border-blue-600');
-        tabMaintenance.classList.replace('text-gray-500', 'text-blue-600');
-        tabMaintenance.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
-        tabMaintenance.classList.add('font-semibold');
-        
-        tabFuel.classList.replace('border-blue-600', 'border-transparent');
-        tabFuel.classList.replace('text-blue-600', 'text-gray-500');
-        tabFuel.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
-        tabFuel.classList.remove('font-semibold');
-        
-        viewMaintenance.classList.remove('hidden');
-        viewFuel.classList.add('hidden');
-        renderServiceReminders();
-    });
-}
-
-// Helper: Format Currency
-const formatCurrency = (amount) => {
-    if (amount === null || amount === undefined || isNaN(amount)) return '₱0.00';
-    return `₱${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-// Helper: Format Number
-const formatNumber = (num, decimals = 2) => {
-    if (num === null || num === undefined || isNaN(num)) return '-';
-    return Number(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-};
-
 // Render Profiles Dropdown
 const renderProfiles = () => {
     if (!profileSelect) return;
@@ -634,8 +545,279 @@ const updateOdometerHints = () => {
     }
 };
 
-// ==================== SERVICE REMINDERS & HEALTH METERS ====================
+// ==================== CHART ====================
+const updateChart = (processedData) => {
+    const ctx = document.getElementById('efficiencyChart');
+    if (!ctx) return;
+    
+    const chartData = (processedData || []).filter(d => d.kmPerLiter !== null && !isNaN(d.kmPerLiter));
+    const labels = chartData.map(d => new Date(d.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+    const dataPoints = chartData.map(d => d.kmPerLiter);
 
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+    
+    if (chartData.length === 0) return;
+
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
+    const tickColor = isDarkMode ? '#94a3b8' : '#64748b';
+    const lineColor = isDarkMode ? '#3b82f6' : '#2563eb';
+    const bgColor = isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.1)';
+    const pointColor = isDarkMode ? '#60a5fa' : '#2563eb';
+
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Efficiency (km/L)',
+                data: dataPoints,
+                borderColor: lineColor,
+                backgroundColor: bgColor,
+                borderWidth: 2.5,
+                tension: 0.3,
+                fill: true,
+                pointBackgroundColor: pointColor,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: isDarkMode ? '#0f172a' : '#1e293b',
+                    titleColor: isDarkMode ? '#f8fafc' : '#ffffff',
+                    bodyColor: isDarkMode ? '#cbd5e1' : '#f1f5f9',
+                    borderColor: isDarkMode ? '#334155' : 'transparent',
+                    borderWidth: 1,
+                    callbacks: {
+                        label: function(context) { return ' ' + context.parsed.y.toFixed(2) + ' km/L'; }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: gridColor },
+                    ticks: { color: tickColor }
+                },
+                y: {
+                    grid: { color: gridColor },
+                    ticks: { color: tickColor },
+                    title: { display: true, text: 'km/L', color: tickColor }
+                }
+            }
+        }
+    });
+};
+
+// ==================== DASHBOARD STATS ====================
+const updateStats = (processedData) => {
+    if (!statAvgEconomy || !statAvgCost || !statMonthlyPesos || !statMonthlyLiters || !statTrueCost || !statTotalDist) return;
+
+    if (!processedData || processedData.length < 2) {
+        statAvgEconomy.textContent = "-- km/L";
+        statAvgCost.textContent = "₱--";
+        statMonthlyPesos.textContent = "₱--";
+        statMonthlyLiters.textContent = "-- L / month";
+        statTrueCost.textContent = "₱--";
+        statTotalDist.textContent = "-- km";
+        
+        const latestPrice = (processedData && processedData.length === 1) ? (processedData[0].pricePerLiter || 0) : 0;
+        updateVehicleSpecsAndRange(0, latestPrice, 0);
+        return;
+    }
+
+    let totalTripKm = 0;
+    let totalLiters = 0;
+    let totalAmount = 0;
+    
+    for (let i = 1; i < processedData.length; i++) {
+        if (processedData[i].tripKm) totalTripKm += processedData[i].tripKm;
+        if (processedData[i].liters) totalLiters += processedData[i].liters;
+        if (processedData[i].amount) totalAmount += processedData[i].amount;
+    }
+
+    const avgEconomy = totalLiters > 0 ? totalTripKm / totalLiters : 0;
+    const fuelCostPerKm = totalTripKm > 0 ? totalAmount / totalTripKm : 0;
+    
+    const latestRecord = processedData[processedData.length - 1];
+    const firstRecord = processedData[0];
+    const totalDistance = latestRecord.odometer - firstRecord.odometer;
+
+    // 30-Day Monthly Projection
+    const firstDate = new Date(firstRecord.date);
+    const latestDate = new Date(latestRecord.date);
+    const totalDays = Math.max(1, Math.round(Math.abs(latestDate - firstDate) / (1000 * 60 * 60 * 24)));
+    
+    let monthlyLiters = 0;
+    let monthlyPesos = 0;
+
+    if (totalDays > 0 && avgEconomy > 0) {
+        const dailyKm = totalTripKm / totalDays;
+        const monthlyKm = dailyKm * 30;
+        monthlyLiters = monthlyKm / avgEconomy;
+        const avgPricePerLiter = totalLiters > 0 ? (totalAmount / totalLiters) : (latestRecord.pricePerLiter || 0);
+        monthlyPesos = monthlyLiters * avgPricePerLiter;
+    } else if (latestRecord.pesosIn30Days) {
+        monthlyPesos = latestRecord.pesosIn30Days;
+        monthlyLiters = latestRecord.litersIn30Days || 0;
+    }
+
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+    const totalMaintAmount = profileMaint.reduce((sum, r) => sum + (r.cost || 0), 0);
+    const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
+
+    statAvgEconomy.textContent = `${formatNumber(avgEconomy)} km/L`;
+    statAvgCost.textContent = `${formatCurrency(fuelCostPerKm)}/km`;
+    statMonthlyPesos.textContent = formatCurrency(monthlyPesos);
+    statMonthlyLiters.textContent = `~${formatNumber(monthlyLiters)} L / month (30d)`;
+    statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
+    statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
+
+    // Update Specs Banner
+    const latestPrice = latestRecord.pricePerLiter || 0;
+    updateVehicleSpecsAndRange(avgEconomy, latestPrice, fuelCostPerKm);
+};
+
+// ==================== RENDER TABLES ====================
+const renderTable = () => {
+    if (!historyTableBody) return;
+    historyTableBody.innerHTML = '';
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+    const tableEl = document.querySelector('#view-fuel table');
+    const specs = getVehicleSpecs(currentProfileName);
+    const avgEconomy = getVehicleAvgEconomy(currentProfileName);
+    
+    if (profileRecords.length === 0) {
+        if (emptyState) emptyState.classList.remove('hidden');
+        if (tableEl) tableEl.classList.add('hidden');
+        updateStats([]);
+        if (chartInstance) {
+            chartInstance.destroy();
+            chartInstance = null;
+        }
+        updateOdometerHints();
+        updateVehicleSpecsAndRange(0, 0, 0);
+        return;
+    }
+
+    if (emptyState) emptyState.classList.add('hidden');
+    if (tableEl) tableEl.classList.remove('hidden');
+
+    const processedData = processRecords(profileRecords);
+    const displayData = [...processedData].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    displayData.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
+        const dateObj = new Date(row.date);
+        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+
+        const pctTank = (row.liters > 0 && specs.tankCapacity > 0) ? `${((row.liters / specs.tankCapacity) * 100).toFixed(0)}% tank` : '';
+        const economyToUse = row.kmPerLiter || avgEconomy;
+        const rangeAddedVal = (row.liters > 0 && economyToUse > 0) ? (row.liters * economyToUse) : null;
+        const rangeAddedStr = rangeAddedVal ? `+${formatNumber(rangeAddedVal, 0)} km` : '';
+
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-slate-400">${row.tripKm !== null ? row.tripKm : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50/50 dark:bg-amber-950/20">
+                <div class="text-amber-700 dark:text-amber-400 font-bold">${formatNumber(row.liters)} L</div>
+                <div class="text-[11px] flex items-center justify-end space-x-1 mt-0.5">
+                    ${pctTank ? `<span class="text-[10px] text-gray-400 dark:text-slate-500 font-medium">${pctTank}</span>` : ''}
+                    ${rangeAddedStr ? `<span class="inline-flex items-center text-[10px] bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">${rangeAddedStr}</span>` : ''}
+                </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-950/20">${formatCurrency(row.pricePerLiter)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-slate-100 font-medium">${formatCurrency(row.amount)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-blue-50/70 dark:bg-blue-950/30 border-x border-blue-100/60 dark:border-blue-900/40">
+                ${row.pesoPerKm !== null ? `<span class="inline-flex items-center text-xs font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-800 px-2 py-0.5 rounded shadow-2xs border border-blue-200 dark:border-blue-800">${formatCurrency(row.pesoPerKm)}/km</span>` : '<span class="text-gray-400 dark:text-slate-500">-</span>'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 dark:text-emerald-400 font-medium bg-green-50 dark:bg-emerald-950/20">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50 dark:bg-amber-950/20">
+                <div class="text-amber-900 dark:text-amber-300 font-bold">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</div>
+                <div class="text-[11px] text-gray-500 dark:text-slate-400 font-medium">${row.litersIn30Days !== null ? formatNumber(row.litersIn30Days) + ' L' : ''}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button onclick="editRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
+                    <i data-lucide="edit-2" class="h-4 w-4"></i>
+                </button>
+                <button onclick="deleteRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
+                    <i data-lucide="trash-2" class="h-4 w-4"></i>
+                </button>
+            </td>
+        `;
+        historyTableBody.appendChild(tr);
+    });
+
+    if (window.lucide) lucide.createIcons();
+    updateStats(processedData);
+    updateChart(processedData);
+    updateOdometerHints();
+    renderServiceReminders();
+};
+
+const renderMaintenanceTable = () => {
+    if (!maintTableBody) return;
+    maintTableBody.innerHTML = '';
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+    const tableContainer = maintTableBody.closest('table');
+    
+    if (profileMaint.length === 0) {
+        if (maintEmptyState) maintEmptyState.classList.remove('hidden');
+        if (tableContainer) tableContainer.classList.add('hidden');
+        updateOdometerHints();
+        renderServiceReminders();
+        return;
+    }
+
+    if (maintEmptyState) maintEmptyState.classList.add('hidden');
+    if (tableContainer) tableContainer.classList.remove('hidden');
+
+    const displayData = [...profileMaint].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    displayData.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
+        const dateObj = new Date(row.date);
+        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100 font-medium">${row.type}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">${row.notes || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-950/20">${formatCurrency(row.cost)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button onclick="editMaintRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
+                    <i data-lucide="edit-2" class="h-4 w-4"></i>
+                </button>
+                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
+                    <i data-lucide="trash-2" class="h-4 w-4"></i>
+                </button>
+            </td>
+        `;
+        maintTableBody.appendChild(tr);
+    });
+    if (window.lucide) lucide.createIcons();
+    
+    const currentProfileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+    const processedData = processRecords(currentProfileRecords);
+    updateStats(processedData);
+    updateOdometerHints();
+    renderServiceReminders();
+};
+
+// ==================== SERVICE REMINDERS ====================
 const defaultServices = [
     { id: 'oil_change', name: 'Oil Change', defaultInterval: 2000, icon: 'droplet', matchTypes: ['oil change', 'engine oil'] },
     { id: 'gear_oil', name: 'Gear Oil', defaultInterval: 4000, icon: 'disc', matchTypes: ['gear oil', 'transmission'] },
@@ -648,11 +830,7 @@ const getServicesConfig = () => {
     const key = `service_config_${currentProfileName}`;
     const stored = localStorage.getItem(key);
     if (stored) {
-        try {
-            return JSON.parse(stored);
-        } catch (e) {
-            console.error('Error parsing stored service config:', e);
-        }
+        try { return JSON.parse(stored); } catch (e) { }
     }
     return defaultServices;
 };
@@ -844,6 +1022,127 @@ const renderServiceReminders = () => {
     if (window.lucide) lucide.createIcons();
 };
 
+// ==================== THEME MANAGEMENT ====================
+const applyTheme = (theme) => {
+    const isDark = theme === 'dark';
+    if (isDark) {
+        document.documentElement.classList.add('dark');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', 'sun');
+            if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Light Mode');
+        }
+    } else {
+        document.documentElement.classList.remove('dark');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', 'moon');
+            if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Dark / AMOLED Mode');
+        }
+    }
+    localStorage.setItem('theme', theme);
+    if (window.lucide) lucide.createIcons();
+    
+    // Refresh chart with updated theme colors if records exist
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+    if (profileRecords.length > 0) {
+        updateChart(processRecords(profileRecords));
+    }
+};
+
+// ==================== EVENT LISTENERS ====================
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        const isCurrentlyDark = document.documentElement.classList.contains('dark');
+        applyTheme(isCurrentlyDark ? 'light' : 'dark');
+    });
+}
+
+// PWA Install Prompt
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (installPwaBtn) {
+        installPwaBtn.classList.remove('hidden');
+        installPwaBtn.classList.add('flex');
+    }
+});
+
+if (installPwaBtn) {
+    installPwaBtn.addEventListener('click', async () => {
+        if (!deferredInstallPrompt) return;
+        deferredInstallPrompt.prompt();
+        const choiceResult = await deferredInstallPrompt.userChoice;
+        if (choiceResult.outcome === 'accepted') {
+            console.log('[PWA] Installed');
+        }
+        deferredInstallPrompt = null;
+        installPwaBtn.classList.add('hidden');
+        installPwaBtn.classList.remove('flex');
+    });
+}
+
+// Online / Offline Status
+const updateOnlineStatus = () => {
+    const isOnline = navigator.onLine;
+    if (networkStatus) {
+        if (isOnline) {
+            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> Online';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5';
+        } else {
+            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span> Offline (Cached)';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-amber-600 dark:text-amber-400 mt-0.5';
+        }
+    }
+    if (offlineBanner) {
+        if (isOnline) {
+            offlineBanner.classList.add('hidden');
+        } else {
+            offlineBanner.classList.remove('hidden');
+        }
+    }
+    if (window.lucide) lucide.createIcons();
+};
+
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+// Tabs
+if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
+    tabFuel.addEventListener('click', () => {
+        tabFuel.classList.replace('border-transparent', 'border-blue-600');
+        tabFuel.classList.replace('text-gray-500', 'text-blue-600');
+        tabFuel.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
+        tabFuel.classList.add('font-semibold');
+        
+        tabMaintenance.classList.replace('border-blue-600', 'border-transparent');
+        tabMaintenance.classList.replace('text-blue-600', 'text-gray-500');
+        tabMaintenance.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
+        tabMaintenance.classList.remove('font-semibold');
+        
+        viewFuel.classList.remove('hidden');
+        viewMaintenance.classList.add('hidden');
+    });
+
+    tabMaintenance.addEventListener('click', () => {
+        tabMaintenance.classList.replace('border-transparent', 'border-blue-600');
+        tabMaintenance.classList.replace('text-gray-500', 'text-blue-600');
+        tabMaintenance.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
+        tabMaintenance.classList.add('font-semibold');
+        
+        tabFuel.classList.replace('border-blue-600', 'border-transparent');
+        tabFuel.classList.replace('text-blue-600', 'text-gray-500');
+        tabFuel.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
+        tabFuel.classList.remove('font-semibold');
+        
+        viewMaintenance.classList.remove('hidden');
+        viewFuel.classList.add('hidden');
+        renderServiceReminders();
+    });
+}
+
+// Profile Select
 if (profileSelect) {
     profileSelect.addEventListener('change', (e) => {
         activeProfile = e.target.value;
@@ -859,6 +1158,7 @@ if (profileSelect) {
     });
 }
 
+// Add Profile
 if (addProfileBtn) {
     addProfileBtn.addEventListener('click', () => {
         const newProfile = prompt('Enter new vehicle name (e.g. Chery Tiggo 8 Pro, Honda Click, Yamaha NMAX, Toyota Vios):');
@@ -881,410 +1181,7 @@ if (addProfileBtn) {
     });
 }
 
-if (cancelEditBtn) {
-    cancelEditBtn.addEventListener('click', () => {
-        editingId = null;
-        form.reset();
-        dateInput.valueAsDate = new Date();
-        calculatedTotal.textContent = '₱0.00';
-        if (calculatedRange) calculatedRange.textContent = '+0 km';
-        if (calculatedCostPerKm) calculatedCostPerKm.textContent = '₱0.00/km';
-        submitBtn.textContent = 'Save Record';
-        cancelEditBtn.classList.add('hidden');
-        updateLitersPercentHint();
-    });
-}
-
-window.editRecord = (id) => {
-    const record = records.find(r => r.id === id);
-    if (!record) return;
-    
-    editingId = id;
-    dateInput.value = record.date;
-    odometerInput.value = record.odometer;
-    litersInput.value = record.liters;
-    priceInput.value = record.pricePerLiter;
-    calculateFormTotal();
-    
-    submitBtn.textContent = 'Update Record';
-    cancelEditBtn.classList.remove('hidden');
-    
-    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-};
-
-window.deleteRecord = async (id) => {
-    if (confirm('Are you sure you want to delete this record?')) {
-        try {
-            await deleteDoc(doc(db, "fuelRecords", id));
-        } catch (err) {
-            alert('Failed to delete record: ' + err.message);
-        }
-    }
-};
-
-window.editMaintRecord = (id) => {
-    const record = maintRecords.find(r => r.id === id);
-    if (!record) return;
-
-    editingMaintId = id;
-    maintDateInput.value = record.date;
-    maintOdoInput.value = record.odometer;
-    maintTypeInput.value = record.type;
-    maintCostInput.value = record.cost;
-    maintNotesInput.value = record.notes || '';
-
-    if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="edit" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Edit Maintenance';
-    if (maintSubmitBtn) maintSubmitBtn.textContent = 'Update Record';
-    if (maintCancelEditBtn) maintCancelEditBtn.classList.remove('hidden');
-
-    if (window.lucide) lucide.createIcons();
-    maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-};
-
-if (maintCancelEditBtn) {
-    maintCancelEditBtn.addEventListener('click', () => {
-        editingMaintId = null;
-        maintForm.reset();
-        maintDateInput.valueAsDate = new Date();
-        if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Log Maintenance';
-        if (maintSubmitBtn) maintSubmitBtn.textContent = 'Save Record';
-        maintCancelEditBtn.classList.add('hidden');
-        if (window.lucide) lucide.createIcons();
-    });
-}
-
-window.deleteMaintRecord = async (id) => {
-    if (confirm('Are you sure you want to delete this maintenance record?')) {
-        try {
-            await deleteDoc(doc(db, "maintRecords", id));
-        } catch (err) {
-            alert('Failed to delete maintenance record: ' + err.message);
-        }
-    }
-};
-
-const updateChart = (processedData) => {
-    const ctx = document.getElementById('efficiencyChart');
-    if (!ctx) return;
-    
-    const chartData = processedData.filter(d => d.kmPerLiter !== null && !isNaN(d.kmPerLiter));
-    const labels = chartData.map(d => new Date(d.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
-    const dataPoints = chartData.map(d => d.kmPerLiter);
-
-    if (chartInstance) {
-        chartInstance.destroy();
-    }
-    
-    if (chartData.length === 0) return;
-
-    const isDarkMode = document.documentElement.classList.contains('dark');
-    const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
-    const tickColor = isDarkMode ? '#94a3b8' : '#64748b';
-    const lineColor = isDarkMode ? '#3b82f6' : '#2563eb';
-    const bgColor = isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.1)';
-    const pointColor = isDarkMode ? '#60a5fa' : '#2563eb';
-
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Efficiency (km/L)',
-                data: dataPoints,
-                borderColor: lineColor,
-                backgroundColor: bgColor,
-                borderWidth: 2.5,
-                tension: 0.3,
-                fill: true,
-                pointBackgroundColor: pointColor,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: isDarkMode ? '#0f172a' : '#1e293b',
-                    titleColor: isDarkMode ? '#f8fafc' : '#ffffff',
-                    bodyColor: isDarkMode ? '#cbd5e1' : '#f1f5f9',
-                    borderColor: isDarkMode ? '#334155' : 'transparent',
-                    borderWidth: 1,
-                    callbacks: {
-                        label: function(context) { return ' ' + context.parsed.y.toFixed(2) + ' km/L'; }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: { color: gridColor },
-                    ticks: { color: tickColor }
-                },
-                y: {
-                    grid: { color: gridColor },
-                    ticks: { color: tickColor },
-                    title: { display: true, text: 'km/L', color: tickColor }
-                }
-            }
-        }
-    });
-};
-
-const processRecords = (data) => {
-    if (data.length === 0) return [];
-    
-    const sortedData = [...data].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    return sortedData.map((record, index) => {
-        const amount = (record.liters || 0) * (record.pricePerLiter || 0);
-        
-        if (index === 0) {
-            return {
-                ...record,
-                amount,
-                tripKm: null,
-                pesoPerKm: null,
-                kmPerLiter: null,
-                daysInterval: null,
-                avgKmPerDay: null,
-                kmIn30Days: null,
-                litersIn30Days: null,
-                pesosIn30Days: null
-            };
-        }
-        
-        const prevRecord = sortedData[index - 1];
-        const tripKm = record.odometer - prevRecord.odometer;
-        const pesoPerKm = tripKm > 0 ? amount / tripKm : null;
-        const kmPerLiter = (record.liters > 0) ? tripKm / record.liters : null;
-        
-        const diffTime = Math.abs(new Date(record.date) - new Date(prevRecord.date));
-        const daysInterval = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        const avgKmPerDay = daysInterval > 0 ? tripKm / daysInterval : 0;
-        const kmIn30Days = avgKmPerDay * 30;
-        const litersIn30Days = kmPerLiter ? (kmIn30Days / kmPerLiter) : null;
-        const pesosIn30Days = (litersIn30Days && record.pricePerLiter) ? (litersIn30Days * record.pricePerLiter) : null;
-
-        return {
-            ...record,
-            amount,
-            tripKm,
-            pesoPerKm,
-            kmPerLiter,
-            daysInterval,
-            avgKmPerDay,
-            kmIn30Days,
-            litersIn30Days,
-            pesosIn30Days
-        };
-    });
-};
-
-// Update Dashboard Stats
-const updateStats = (processedData) => {
-    if (!statAvgEconomy || !statAvgCost || !statMonthlyPesos || !statMonthlyLiters || !statTrueCost || !statTotalDist) return;
-
-    if (processedData.length < 2) {
-        statAvgEconomy.textContent = "-- km/L";
-        statAvgCost.textContent = "₱--";
-        statMonthlyPesos.textContent = "₱--";
-        statMonthlyLiters.textContent = "-- L / month";
-        statTrueCost.textContent = "₱--";
-        statTotalDist.textContent = "-- km";
-        
-        const latestPrice = processedData.length === 1 ? (processedData[0].pricePerLiter || 0) : 0;
-        updateVehicleSpecsAndRange(0, latestPrice, 0);
-        return;
-    }
-
-    let totalTripKm = 0;
-    let totalLiters = 0;
-    let totalAmount = 0;
-    
-    for (let i = 1; i < processedData.length; i++) {
-        if (processedData[i].tripKm) totalTripKm += processedData[i].tripKm;
-        if (processedData[i].liters) totalLiters += processedData[i].liters;
-        if (processedData[i].amount) totalAmount += processedData[i].amount;
-    }
-
-    const avgEconomy = totalLiters > 0 ? totalTripKm / totalLiters : 0;
-    const fuelCostPerKm = totalTripKm > 0 ? totalAmount / totalTripKm : 0;
-    
-    const latestRecord = processedData[processedData.length - 1];
-    const firstRecord = processedData[0];
-    const totalDistance = latestRecord.odometer - firstRecord.odometer;
-
-    // Estimated 30-Day Monthly Fuel Consumption (Liters and Pesos)
-    const firstDate = new Date(firstRecord.date);
-    const latestDate = new Date(latestRecord.date);
-    const totalDays = Math.max(1, Math.round(Math.abs(latestDate - firstDate) / (1000 * 60 * 60 * 24)));
-    
-    let monthlyLiters = 0;
-    let monthlyPesos = 0;
-
-    if (totalDays > 0 && avgEconomy > 0) {
-        const dailyKm = totalTripKm / totalDays;
-        const monthlyKm = dailyKm * 30;
-        monthlyLiters = monthlyKm / avgEconomy;
-        const avgPricePerLiter = totalLiters > 0 ? (totalAmount / totalLiters) : (latestRecord.pricePerLiter || 0);
-        monthlyPesos = monthlyLiters * avgPricePerLiter;
-    } else if (latestRecord.pesosIn30Days) {
-        monthlyPesos = latestRecord.pesosIn30Days;
-        monthlyLiters = latestRecord.litersIn30Days || 0;
-    }
-
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
-    const totalMaintAmount = profileMaint.reduce((sum, r) => sum + (r.cost || 0), 0);
-    const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
-
-    statAvgEconomy.textContent = `${formatNumber(avgEconomy)} km/L`;
-    statAvgCost.textContent = `${formatCurrency(fuelCostPerKm)}/km`;
-    statMonthlyPesos.textContent = formatCurrency(monthlyPesos);
-    statMonthlyLiters.textContent = `~${formatNumber(monthlyLiters)} L / month (30d)`;
-    statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
-    statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
-
-    // Update Tank Specs & Range Estimator Bar with Cost/km
-    const latestPrice = latestRecord.pricePerLiter || 0;
-    updateVehicleSpecsAndRange(avgEconomy, latestPrice, fuelCostPerKm);
-};
-
-// Render Tables
-const renderTable = () => {
-    if (!historyTableBody) return;
-    historyTableBody.innerHTML = '';
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-    const tableEl = document.querySelector('#view-fuel table');
-    const specs = getVehicleSpecs(currentProfileName);
-    const avgEconomy = getVehicleAvgEconomy(currentProfileName);
-    
-    if (profileRecords.length === 0) {
-        if (emptyState) emptyState.classList.remove('hidden');
-        if (tableEl) tableEl.classList.add('hidden');
-        updateStats([]);
-        if (chartInstance) {
-            chartInstance.destroy();
-            chartInstance = null;
-        }
-        updateOdometerHints();
-        updateVehicleSpecsAndRange(0, 0, 0);
-        return;
-    }
-
-    if (emptyState) emptyState.classList.add('hidden');
-    if (tableEl) tableEl.classList.remove('hidden');
-
-    const processedData = processRecords(profileRecords);
-    const displayData = [...processedData].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    displayData.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
-        const dateObj = new Date(row.date);
-        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
-
-        const pctTank = (row.liters > 0 && specs.tankCapacity > 0) ? `${((row.liters / specs.tankCapacity) * 100).toFixed(0)}% tank` : '';
-        const economyToUse = row.kmPerLiter || avgEconomy;
-        const rangeAddedVal = (row.liters > 0 && economyToUse > 0) ? (row.liters * economyToUse) : null;
-        const rangeAddedStr = rangeAddedVal ? `+${formatNumber(rangeAddedVal, 0)} km` : '';
-
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-slate-400">${row.tripKm !== null ? row.tripKm : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50/50 dark:bg-amber-950/20">
-                <div class="text-amber-700 dark:text-amber-400 font-bold">${formatNumber(row.liters)} L</div>
-                <div class="text-[11px] flex items-center justify-end space-x-1 mt-0.5">
-                    ${pctTank ? `<span class="text-[10px] text-gray-400 dark:text-slate-500 font-medium">${pctTank}</span>` : ''}
-                    ${rangeAddedStr ? `<span class="inline-flex items-center text-[10px] bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">${rangeAddedStr}</span>` : ''}
-                </div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-950/20">${formatCurrency(row.pricePerLiter)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-slate-100 font-medium">${formatCurrency(row.amount)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-blue-50/70 dark:bg-blue-950/30 border-x border-blue-100/60 dark:border-blue-900/40">
-                ${row.pesoPerKm !== null ? `<span class="inline-flex items-center text-xs font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-800 px-2 py-0.5 rounded shadow-2xs border border-blue-200 dark:border-blue-800">${formatCurrency(row.pesoPerKm)}/km</span>` : '<span class="text-gray-400 dark:text-slate-500">-</span>'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 dark:text-emerald-400 font-medium bg-green-50 dark:bg-emerald-950/20">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50 dark:bg-amber-950/20">
-                <div class="text-amber-900 dark:text-amber-300 font-bold">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</div>
-                <div class="text-[11px] text-gray-500 dark:text-slate-400 font-medium">${row.litersIn30Days !== null ? formatNumber(row.litersIn30Days) + ' L' : ''}</div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
-                    <i data-lucide="edit-2" class="h-4 w-4"></i>
-                </button>
-                <button onclick="deleteRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
-                    <i data-lucide="trash-2" class="h-4 w-4"></i>
-                </button>
-            </td>
-        `;
-        historyTableBody.appendChild(tr);
-    });
-
-    if (window.lucide) lucide.createIcons();
-    updateStats(processedData);
-    updateChart(processedData);
-    updateOdometerHints();
-    renderServiceReminders();
-};
-
-const renderMaintenanceTable = () => {
-    if (!maintTableBody) return;
-    maintTableBody.innerHTML = '';
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
-    const tableContainer = maintTableBody.closest('table');
-    
-    if (profileMaint.length === 0) {
-        if (maintEmptyState) maintEmptyState.classList.remove('hidden');
-        if (tableContainer) tableContainer.classList.add('hidden');
-        updateOdometerHints();
-        renderServiceReminders();
-        return;
-    }
-
-    if (maintEmptyState) maintEmptyState.classList.add('hidden');
-    if (tableContainer) tableContainer.classList.remove('hidden');
-
-    const displayData = [...profileMaint].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    displayData.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
-        const dateObj = new Date(row.date);
-        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
-
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100 font-medium">${row.type}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">${row.notes || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-950/20">${formatCurrency(row.cost)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editMaintRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
-                    <i data-lucide="edit-2" class="h-4 w-4"></i>
-                </button>
-                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
-                    <i data-lucide="trash-2" class="h-4 w-4"></i>
-                </button>
-            </td>
-        `;
-        maintTableBody.appendChild(tr);
-    });
-    if (window.lucide) lucide.createIcons();
-    
-    const currentProfileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-    const processedData = processRecords(currentProfileRecords);
-    updateStats(processedData);
-    updateOdometerHints();
-    renderServiceReminders();
-};
-
+// Fuel Form Submit
 if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1337,6 +1234,50 @@ if (form) {
     });
 }
 
+// Cancel Fuel Edit
+if (cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', () => {
+        editingId = null;
+        form.reset();
+        dateInput.valueAsDate = new Date();
+        calculatedTotal.textContent = '₱0.00';
+        if (calculatedRange) calculatedRange.textContent = '+0 km';
+        if (calculatedCostPerKm) calculatedCostPerKm.textContent = '₱0.00/km';
+        submitBtn.textContent = 'Save Record';
+        cancelEditBtn.classList.add('hidden');
+        updateLitersPercentHint();
+    });
+}
+
+// Window Global Action Handlers
+window.editRecord = (id) => {
+    const record = records.find(r => r.id === id);
+    if (!record) return;
+    
+    editingId = id;
+    dateInput.value = record.date;
+    odometerInput.value = record.odometer;
+    litersInput.value = record.liters;
+    priceInput.value = record.pricePerLiter;
+    calculateFormTotal();
+    
+    submitBtn.textContent = 'Update Record';
+    cancelEditBtn.classList.remove('hidden');
+    
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+window.deleteRecord = async (id) => {
+    if (confirm('Are you sure you want to delete this record?')) {
+        try {
+            await deleteDoc(doc(db, "fuelRecords", id));
+        } catch (err) {
+            alert('Failed to delete record: ' + err.message);
+        }
+    }
+};
+
+// Maintenance Form Submit
 if (maintForm) {
     maintForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1392,6 +1333,48 @@ if (maintForm) {
     });
 }
 
+window.editMaintRecord = (id) => {
+    const record = maintRecords.find(r => r.id === id);
+    if (!record) return;
+
+    editingMaintId = id;
+    maintDateInput.value = record.date;
+    maintOdoInput.value = record.odometer;
+    maintTypeInput.value = record.type;
+    maintCostInput.value = record.cost;
+    maintNotesInput.value = record.notes || '';
+
+    if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="edit" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Edit Maintenance';
+    if (maintSubmitBtn) maintSubmitBtn.textContent = 'Update Record';
+    if (maintCancelEditBtn) maintCancelEditBtn.classList.remove('hidden');
+
+    if (window.lucide) lucide.createIcons();
+    maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+if (maintCancelEditBtn) {
+    maintCancelEditBtn.addEventListener('click', () => {
+        editingMaintId = null;
+        maintForm.reset();
+        maintDateInput.valueAsDate = new Date();
+        if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Log Maintenance';
+        if (maintSubmitBtn) maintSubmitBtn.textContent = 'Save Record';
+        maintCancelEditBtn.classList.add('hidden');
+        if (window.lucide) lucide.createIcons();
+    });
+}
+
+window.deleteMaintRecord = async (id) => {
+    if (confirm('Are you sure you want to delete this maintenance record?')) {
+        try {
+            await deleteDoc(doc(db, "maintRecords", id));
+        } catch (err) {
+            alert('Failed to delete maintenance record: ' + err.message);
+        }
+    }
+};
+
+// Clear All Data
 if (clearDataBtn) {
     clearDataBtn.addEventListener('click', async () => {
         const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
@@ -1417,7 +1400,7 @@ if (clearDataBtn) {
     });
 }
 
-// REAL-TIME LISTENERS
+// ==================== FIRESTORE REAL-TIME LISTENERS ====================
 onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     syncProfilesFromRecords();
@@ -1432,7 +1415,20 @@ onSnapshot(collection(db, "maintRecords"), (snapshot) => {
     renderServiceReminders();
 });
 
+// ==================== INITIAL BOOTUP ====================
+if (maintDateInput) maintDateInput.valueAsDate = new Date();
+if (dateInput) dateInput.valueAsDate = new Date();
+
 renderProfiles();
 updateOdometerHints();
 renderServiceReminders();
 updateVehicleSpecsAndRange(0, 0, 0);
+
+// Initialize Theme
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme) {
+    applyTheme(savedTheme);
+} else {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(prefersDark ? 'dark' : 'light');
+}

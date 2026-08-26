@@ -45,6 +45,50 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// ==================== THEME (DARK / AMOLED & LIGHT) ====================
+const themeToggleBtn = document.getElementById('theme-toggle-btn');
+const themeIcon = document.getElementById('theme-icon');
+
+const applyTheme = (theme) => {
+    const isDark = theme === 'dark';
+    if (isDark) {
+        document.documentElement.classList.add('dark');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', 'sun');
+            themeToggleBtn.setAttribute('title', 'Switch to Light Mode');
+        }
+    } else {
+        document.documentElement.classList.remove('dark');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', 'moon');
+            themeToggleBtn.setAttribute('title', 'Switch to Dark / AMOLED Mode');
+        }
+    }
+    localStorage.setItem('theme', theme);
+    if (window.lucide) lucide.createIcons();
+    
+    // Re-render chart to update gridlines and colors
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+    updateChart(processRecords(profileRecords));
+};
+
+// Initialize theme preference
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme) {
+    applyTheme(savedTheme);
+} else {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    applyTheme(prefersDark ? 'dark' : 'light');
+}
+
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        const isCurrentlyDark = document.documentElement.classList.contains('dark');
+        applyTheme(isCurrentlyDark ? 'light' : 'dark');
+    });
+}
+
 // PWA Install Prompt Handling
 let deferredInstallPrompt = null;
 const installPwaBtn = document.getElementById('install-pwa-btn');
@@ -89,10 +133,10 @@ const updateOnlineStatus = () => {
     if (networkStatus) {
         if (isOnline) {
             networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> Online';
-            networkStatus.className = 'flex items-center text-[10px] font-medium text-emerald-600 mt-0.5';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5';
         } else {
             networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span> Offline (Cached)';
-            networkStatus.className = 'flex items-center text-[10px] font-medium text-amber-600 mt-0.5';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-amber-600 dark:text-amber-400 mt-0.5';
         }
     }
     if (offlineBanner) {
@@ -367,10 +411,10 @@ const updateLitersPercentHint = () => {
     if (litersVal > 0 && specs.tankCapacity > 0) {
         const pct = ((litersVal / specs.tankCapacity) * 100).toFixed(1);
         litersPercentHint.textContent = `${pct}% of ${specs.tankCapacity}L tank filled`;
-        litersPercentHint.className = 'text-[11px] text-blue-600 font-semibold mt-1 block';
+        litersPercentHint.className = 'text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-1 block';
     } else {
         litersPercentHint.textContent = `Tank capacity: ${specs.tankCapacity} L`;
-        litersPercentHint.className = 'text-[11px] text-gray-500 mt-1 block';
+        litersPercentHint.className = 'text-[11px] text-gray-500 dark:text-slate-400 mt-1 block';
     }
 };
 
@@ -448,10 +492,14 @@ if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
     tabFuel.addEventListener('click', () => {
         tabFuel.classList.replace('border-transparent', 'border-blue-600');
         tabFuel.classList.replace('text-gray-500', 'text-blue-600');
+        tabFuel.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
         tabFuel.classList.add('font-semibold');
+        
         tabMaintenance.classList.replace('border-blue-600', 'border-transparent');
         tabMaintenance.classList.replace('text-blue-600', 'text-gray-500');
+        tabMaintenance.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
         tabMaintenance.classList.remove('font-semibold');
+        
         viewFuel.classList.remove('hidden');
         viewMaintenance.classList.add('hidden');
     });
@@ -459,10 +507,14 @@ if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
     tabMaintenance.addEventListener('click', () => {
         tabMaintenance.classList.replace('border-transparent', 'border-blue-600');
         tabMaintenance.classList.replace('text-gray-500', 'text-blue-600');
+        tabMaintenance.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
         tabMaintenance.classList.add('font-semibold');
+        
         tabFuel.classList.replace('border-blue-600', 'border-transparent');
         tabFuel.classList.replace('text-blue-600', 'text-gray-500');
+        tabFuel.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
         tabFuel.classList.remove('font-semibold');
+        
         viewMaintenance.classList.remove('hidden');
         viewFuel.classList.add('hidden');
         renderServiceReminders();
@@ -731,45 +783,45 @@ const renderServiceReminders = () => {
         if (remainingKm <= 0) {
             const overdueKm = Math.abs(remainingKm);
             statusText = `OVERDUE by ${formatNumber(overdueKm, 0)} km`;
-            statusBadgeClass = 'bg-rose-100 text-rose-700 border-rose-200';
+            statusBadgeClass = 'bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900';
             progressBarColor = 'bg-rose-600';
             statusIcon = 'alert-triangle';
         } else if (remainingKm <= interval * 0.25) {
             statusText = `Due soon! (${formatNumber(remainingKm, 0)} km left)`;
-            statusBadgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+            statusBadgeClass = 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900';
             progressBarColor = 'bg-amber-500';
             statusIcon = 'clock';
         } else {
             statusText = `Due in ${formatNumber(remainingKm, 0)} km`;
-            statusBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+            statusBadgeClass = 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900';
             progressBarColor = 'bg-emerald-500';
             statusIcon = 'shield-check';
         }
 
         const card = document.createElement('div');
-        card.className = 'bg-gray-50 rounded-xl p-4 border border-gray-200 flex flex-col justify-between hover:shadow-sm transition-all';
+        card.className = 'bg-gray-50 dark:bg-slate-950 rounded-xl p-4 border border-gray-200 dark:border-slate-800 flex flex-col justify-between hover:shadow-sm transition-all';
         card.innerHTML = `
             <div>
                 <div class="flex items-start justify-between mb-2">
                     <div class="flex items-center space-x-2">
-                        <div class="p-2 rounded-lg bg-white border border-gray-200 shadow-2xs text-gray-700">
-                            <i data-lucide="${service.icon || 'wrench'}" class="h-4 w-4 text-orange-600"></i>
+                        <div class="p-2 rounded-lg bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 shadow-2xs text-gray-700 dark:text-slate-300">
+                            <i data-lucide="${service.icon || 'wrench'}" class="h-4 w-4 text-orange-600 dark:text-orange-400"></i>
                         </div>
-                        <h4 class="text-sm font-bold text-gray-900 leading-tight">${service.name}</h4>
+                        <h4 class="text-sm font-bold text-gray-900 dark:text-white leading-tight">${service.name}</h4>
                     </div>
-                    <button onclick="editServiceInterval('${service.id}')" class="text-gray-400 hover:text-gray-700 p-1 rounded-md transition-colors" title="Adjust interval (current: every ${formatNumber(interval, 0)} km)">
+                    <button onclick="editServiceInterval('${service.id}')" class="text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 p-1 rounded-md transition-colors" title="Adjust interval (current: every ${formatNumber(interval, 0)} km)">
                         <i data-lucide="settings" class="h-3.5 w-3.5"></i>
                     </button>
                 </div>
 
-                <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
-                    <span>Interval: <strong class="text-gray-700">${formatNumber(interval, 0)} km</strong></span>
-                    <span class="text-[11px] ${hasLogged ? 'text-gray-600' : 'text-gray-400'}">
+                <div class="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 mb-2">
+                    <span>Interval: <strong class="text-gray-700 dark:text-slate-200">${formatNumber(interval, 0)} km</strong></span>
+                    <span class="text-[11px] ${hasLogged ? 'text-gray-600 dark:text-slate-400' : 'text-gray-400 dark:text-slate-500'}">
                         ${hasLogged ? `Last: ${formatNumber(lastServiceOdo, 0)} km` : 'No logs yet'}
                     </span>
                 </div>
 
-                <div class="w-full bg-gray-200 rounded-full h-2 mb-2.5 overflow-hidden">
+                <div class="w-full bg-gray-200 dark:bg-slate-800 rounded-full h-2 mb-2.5 overflow-hidden">
                     <div class="${progressBarColor} h-2 rounded-full transition-all duration-500" style="width: ${percentUsed}%;"></div>
                 </div>
 
@@ -778,11 +830,11 @@ const renderServiceReminders = () => {
                         <i data-lucide="${statusIcon}" class="h-3 w-3 mr-1"></i>
                         ${statusText}
                     </span>
-                    <span class="text-[11px] font-medium text-gray-500">${formatNumber(kmSinceLast, 0)} / ${formatNumber(interval, 0)} km</span>
+                    <span class="text-[11px] font-medium text-gray-500 dark:text-slate-400">${formatNumber(kmSinceLast, 0)} / ${formatNumber(interval, 0)} km</span>
                 </div>
             </div>
 
-            <button onclick="quickLogService('${service.name}')" class="w-full mt-2 text-xs bg-white hover:bg-orange-50 text-orange-700 font-semibold py-1.5 px-3 rounded-lg border border-orange-200 transition-colors flex items-center justify-center shadow-2xs">
+            <button onclick="quickLogService('${service.name}')" class="w-full mt-2 text-xs bg-white dark:bg-slate-900 hover:bg-orange-50 dark:hover:bg-orange-950/40 text-orange-700 dark:text-orange-400 font-semibold py-1.5 px-3 rounded-lg border border-orange-200 dark:border-orange-900/60 transition-colors flex items-center justify-center shadow-2xs">
                 <i data-lucide="plus" class="h-3.5 w-3.5 mr-1"></i> Log Service
             </button>
         `;
@@ -881,7 +933,7 @@ window.editMaintRecord = (id) => {
     maintCostInput.value = record.cost;
     maintNotesInput.value = record.notes || '';
 
-    if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="edit" class="h-5 w-5 mr-2 text-orange-600"></i> Edit Maintenance';
+    if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="edit" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Edit Maintenance';
     if (maintSubmitBtn) maintSubmitBtn.textContent = 'Update Record';
     if (maintCancelEditBtn) maintCancelEditBtn.classList.remove('hidden');
 
@@ -894,7 +946,7 @@ if (maintCancelEditBtn) {
         editingMaintId = null;
         maintForm.reset();
         maintDateInput.valueAsDate = new Date();
-        if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600"></i> Log Maintenance';
+        if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Log Maintenance';
         if (maintSubmitBtn) maintSubmitBtn.textContent = 'Save Record';
         maintCancelEditBtn.classList.add('hidden');
         if (window.lucide) lucide.createIcons();
@@ -925,6 +977,13 @@ const updateChart = (processedData) => {
     
     if (chartData.length === 0) return;
 
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
+    const tickColor = isDarkMode ? '#94a3b8' : '#64748b';
+    const lineColor = isDarkMode ? '#3b82f6' : '#2563eb';
+    const bgColor = isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.1)';
+    const pointColor = isDarkMode ? '#60a5fa' : '#2563eb';
+
     chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
@@ -932,12 +991,12 @@ const updateChart = (processedData) => {
             datasets: [{
                 label: 'Efficiency (km/L)',
                 data: dataPoints,
-                borderColor: '#2563eb',
-                backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                borderWidth: 2,
+                borderColor: lineColor,
+                backgroundColor: bgColor,
+                borderWidth: 2.5,
                 tension: 0.3,
                 fill: true,
-                pointBackgroundColor: '#2563eb',
+                pointBackgroundColor: pointColor,
                 pointRadius: 4,
                 pointHoverRadius: 6
             }]
@@ -948,13 +1007,26 @@ const updateChart = (processedData) => {
             plugins: {
                 legend: { display: false },
                 tooltip: {
+                    backgroundColor: isDarkMode ? '#0f172a' : '#1e293b',
+                    titleColor: isDarkMode ? '#f8fafc' : '#ffffff',
+                    bodyColor: isDarkMode ? '#cbd5e1' : '#f1f5f9',
+                    borderColor: isDarkMode ? '#334155' : 'transparent',
+                    borderWidth: 1,
                     callbacks: {
                         label: function(context) { return ' ' + context.parsed.y.toFixed(2) + ' km/L'; }
                     }
                 }
             },
             scales: {
-                y: { title: { display: true, text: 'km/L' } }
+                x: {
+                    grid: { color: gridColor },
+                    ticks: { color: tickColor }
+                },
+                y: {
+                    grid: { color: gridColor },
+                    ticks: { color: tickColor },
+                    title: { display: true, text: 'km/L', color: tickColor }
+                }
             }
         }
     });
@@ -1112,7 +1184,7 @@ const renderTable = () => {
 
     displayData.forEach(row => {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50';
+        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -1122,31 +1194,31 @@ const renderTable = () => {
         const rangeAddedStr = rangeAddedVal ? `+${formatNumber(rangeAddedVal, 0)} km` : '';
 
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.tripKm !== null ? row.tripKm : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50/50">
-                <div class="text-amber-700 font-bold">${formatNumber(row.liters)} L</div>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-slate-400">${row.tripKm !== null ? row.tripKm : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50/50 dark:bg-amber-950/20">
+                <div class="text-amber-700 dark:text-amber-400 font-bold">${formatNumber(row.liters)} L</div>
                 <div class="text-[11px] flex items-center justify-end space-x-1 mt-0.5">
-                    ${pctTank ? `<span class="text-[10px] text-gray-400 font-medium">${pctTank}</span>` : ''}
-                    ${rangeAddedStr ? `<span class="inline-flex items-center text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">${rangeAddedStr}</span>` : ''}
+                    ${pctTank ? `<span class="text-[10px] text-gray-400 dark:text-slate-500 font-medium">${pctTank}</span>` : ''}
+                    ${rangeAddedStr ? `<span class="inline-flex items-center text-[10px] bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">${rangeAddedStr}</span>` : ''}
                 </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-700 font-medium bg-amber-50/50">${formatCurrency(row.pricePerLiter)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-blue-50/70 border-x border-blue-100/60">
-                ${row.pesoPerKm !== null ? `<span class="inline-flex items-center text-xs font-bold text-blue-700 bg-white px-2 py-0.5 rounded shadow-2xs border border-blue-200">${formatCurrency(row.pesoPerKm)}/km</span>` : '<span class="text-gray-400">-</span>'}
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-700 dark:text-amber-400 font-medium bg-amber-50/50 dark:bg-amber-950/20">${formatCurrency(row.pricePerLiter)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-slate-100 font-medium">${formatCurrency(row.amount)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-blue-50/70 dark:bg-blue-950/30 border-x border-blue-100/60 dark:border-blue-900/40">
+                ${row.pesoPerKm !== null ? `<span class="inline-flex items-center text-xs font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-800 px-2 py-0.5 rounded shadow-2xs border border-blue-200 dark:border-blue-800">${formatCurrency(row.pesoPerKm)}/km</span>` : '<span class="text-gray-400 dark:text-slate-500">-</span>'}
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50">
-                <div class="text-amber-900 font-bold">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</div>
-                <div class="text-[11px] text-gray-500 font-medium">${row.litersIn30Days !== null ? formatNumber(row.litersIn30Days) + ' L' : ''}</div>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 dark:text-emerald-400 font-medium bg-green-50 dark:bg-emerald-950/20">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50 dark:bg-amber-950/20">
+                <div class="text-amber-900 dark:text-amber-300 font-bold">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</div>
+                <div class="text-[11px] text-gray-500 dark:text-slate-400 font-medium">${row.litersIn30Days !== null ? formatNumber(row.litersIn30Days) + ' L' : ''}</div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
+                <button onclick="editRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
-                <button onclick="deleteRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
@@ -1183,21 +1255,21 @@ const renderMaintenanceTable = () => {
 
     displayData.forEach(row => {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-gray-50';
+        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
         tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">${row.type}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row.notes || '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 font-medium bg-orange-50">${formatCurrency(row.cost)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100 font-medium">${row.type}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">${row.notes || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-950/20">${formatCurrency(row.cost)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editMaintRecord('${row.id}')" class="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors mr-1" title="Edit">
+                <button onclick="editMaintRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
-                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors" title="Delete">
+                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
@@ -1289,7 +1361,7 @@ if (maintForm) {
             if (editingMaintId) {
                 await setDoc(doc(db, "maintRecords", editingMaintId), recordData);
                 editingMaintId = null;
-                if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600"></i> Log Maintenance';
+                if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Log Maintenance';
                 if (maintCancelEditBtn) maintCancelEditBtn.classList.add('hidden');
             } else {
                 await addDoc(collection(db, "maintRecords"), recordData);

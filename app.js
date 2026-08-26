@@ -153,7 +153,7 @@ const serviceRemindersGrid = document.getElementById('service-reminders-grid');
 const reminderCurrentOdo = document.getElementById('reminder-current-odo');
 const addCustomServiceBtn = document.getElementById('add-custom-service-btn');
 
-// Map Control Elements
+// Map Mode Elements
 const modeBtnRadius = document.getElementById('mode-btn-radius');
 const modeBtnRoute = document.getElementById('mode-btn-route');
 const panelRadius = document.getElementById('panel-radius');
@@ -167,7 +167,22 @@ const radiusFuelNeeded = document.getElementById('radius-fuel-needed');
 const radiusRefuelCost = document.getElementById('radius-refuel-cost');
 const mapStatusHint = document.getElementById('map-status-hint');
 
-// Route Calculator Elements
+// Google Maps Search & Autocomplete Elements
+const radiusSearchInput = document.getElementById('radius-search-input');
+const radiusClearSearchBtn = document.getElementById('radius-clear-search-btn');
+const radiusSearchResults = document.getElementById('radius-search-results');
+
+const routeOriginInput = document.getElementById('route-origin-input');
+const routeOriginClear = document.getElementById('route-origin-clear');
+const routeOriginResults = document.getElementById('route-origin-results');
+const routeLocateStartBtn = document.getElementById('route-locate-start-btn');
+
+const swapRouteBtn = document.getElementById('swap-route-btn');
+
+const routeDestInput = document.getElementById('route-dest-input');
+const routeDestClear = document.getElementById('route-dest-clear');
+const routeDestResults = document.getElementById('route-dest-results');
+
 const presetRouteSelect = document.getElementById('preset-route-select');
 const resetRouteBtn = document.getElementById('reset-route-btn');
 const routeRoundTripCheck = document.getElementById('route-roundtrip-check');
@@ -177,6 +192,12 @@ const routeFuelVal = document.getElementById('route-fuel-val');
 const routeTankPctVal = document.getElementById('route-tank-pct-val');
 const routeCostVal = document.getElementById('route-cost-val');
 const routeRefuelWarning = document.getElementById('route-refuel-warning');
+
+// Floating Canvas Search
+const mapQuickSearchInput = document.getElementById('map-quick-search-input');
+const mapQuickSearchClear = document.getElementById('map-quick-search-clear');
+const mapQuickSearchResults = document.getElementById('map-quick-search-results');
+const mapCanvasLocateBtn = document.getElementById('map-canvas-locate-btn');
 
 // ==================== FORMATTERS & HELPERS ====================
 const formatCurrency = (amount) => {
@@ -379,14 +400,8 @@ const updateVehicleSpecsAndRange = (avgEconomy, latestPrice, fuelCostPerKm = 0) 
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const specs = getVehicleSpecs(currentProfileName);
 
-    // Update Brand Logos
-    if (navbarVehicleLogo) {
-        navbarVehicleLogo.innerHTML = getVehicleLogo(currentProfileName, 'h-4 w-4');
-    }
-    if (vehicleLogoBadge) {
-        vehicleLogoBadge.innerHTML = getVehicleLogo(currentProfileName, 'h-7 w-7 sm:h-8 sm:w-8');
-    }
-
+    if (navbarVehicleLogo) navbarVehicleLogo.innerHTML = getVehicleLogo(currentProfileName, 'h-4 w-4');
+    if (vehicleLogoBadge) vehicleLogoBadge.innerHTML = getVehicleLogo(currentProfileName, 'h-7 w-7 sm:h-8 sm:w-8');
     if (specVehicleName) specVehicleName.textContent = currentProfileName;
     if (specFuelBadge) specFuelBadge.innerHTML = `<i data-lucide="check-circle-2" class="h-3 w-3 mr-1 inline"></i> ${specs.fuelGrade}`;
     if (specFuelDesc) specFuelDesc.textContent = specs.fuelDesc;
@@ -395,20 +410,11 @@ const updateVehicleSpecsAndRange = (avgEconomy, latestPrice, fuelCostPerKm = 0) 
     const fullRange = avgEconomy > 0 ? (specs.tankCapacity * avgEconomy) : 0;
 
     if (specFullRange) {
-        if (fullRange > 0) {
-            specFullRange.textContent = `~${formatNumber(fullRange, 0)} km`;
-        } else {
-            specFullRange.textContent = '-- km';
-        }
+        specFullRange.textContent = fullRange > 0 ? `~${formatNumber(fullRange, 0)} km` : '-- km';
     }
 
     if (specFullCost) {
-        if (latestPrice > 0) {
-            const cost = specs.tankCapacity * latestPrice;
-            specFullCost.textContent = formatCurrency(cost);
-        } else {
-            specFullCost.textContent = '₱--';
-        }
+        specFullCost.textContent = latestPrice > 0 ? formatCurrency(specs.tankCapacity * latestPrice) : '₱--';
     }
 
     if (specCostPerKm) {
@@ -451,7 +457,6 @@ const calculateFormTotal = () => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const avgEconomy = getVehicleAvgEconomy(currentProfileName);
 
-    // Live Range Added calculation
     if (calculatedRange) {
         if (liters > 0 && avgEconomy > 0) {
             const rangeAdded = liters * avgEconomy;
@@ -461,7 +466,6 @@ const calculateFormTotal = () => {
         }
     }
 
-    // Live Cost / km calculation
     if (calculatedCostPerKm) {
         if (price > 0 && avgEconomy > 0) {
             const costPerKm = price / avgEconomy;
@@ -514,7 +518,6 @@ const renderProfiles = () => {
     }
 };
 
-// Auto-sync profile list from database records
 const syncProfilesFromRecords = () => {
     let changed = false;
     records.forEach(r => {
@@ -541,7 +544,6 @@ const syncProfilesFromRecords = () => {
     }
 };
 
-// Get current vehicle highest odometer reading
 const getCurrentVehicleOdometer = (profileName) => {
     const profileFuel = records.filter(r => r.profile === profileName || (profileName === 'Chery' && r.profile === 'Cherry'));
     const profileMaint = maintRecords.filter(r => r.profile === profileName || (profileName === 'Chery' && r.profile === 'Cherry'));
@@ -552,13 +554,11 @@ const getCurrentVehicleOdometer = (profileName) => {
     return allOdos.length > 0 ? Math.max(...allOdos) : 0;
 };
 
-// Update Last Odometer Hints
 const updateOdometerHints = () => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const profileFuel = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
     const profileMaint = maintRecords.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
 
-    // Fuel Form Odometer Hint
     if (lastOdoHint && lastDateHint) {
         if (profileFuel.length > 0) {
             const sortedFuel = [...profileFuel].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -575,7 +575,6 @@ const updateOdometerHints = () => {
         }
     }
 
-    // Maintenance Form Odometer Hint
     if (maintLastOdoHint && maintLastDateHint) {
         const allLogs = [
             ...profileFuel.map(r => ({ date: r.date, odo: r.odometer })),
@@ -702,7 +701,6 @@ const updateStats = (processedData) => {
     const firstRecord = processedData[0];
     const totalDistance = latestRecord.odometer - firstRecord.odometer;
 
-    // 30-Day Monthly Projection
     const firstDate = new Date(firstRecord.date);
     const latestDate = new Date(latestRecord.date);
     const totalDays = Math.max(1, Math.round(Math.abs(latestDate - firstDate) / (1000 * 60 * 60 * 24)));
@@ -733,7 +731,6 @@ const updateStats = (processedData) => {
     statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
     statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
 
-    // Update Specs Banner & Map Defaults
     const latestPrice = latestRecord.pricePerLiter || 0;
     updateVehicleSpecsAndRange(avgEconomy, latestPrice, fuelCostPerKm);
 };
@@ -1075,6 +1072,131 @@ const renderServiceReminders = () => {
     if (window.lucide) lucide.createIcons();
 };
 
+// ==================== GEOCODING & AUTOCOMPLETE (GOOGLE MAPS STYLE) ====================
+const geocodeCache = new Map();
+
+const searchNominatim = async (query) => {
+    if (!query || query.trim().length < 2) return [];
+    const clean = query.trim();
+    if (geocodeCache.has(clean)) return geocodeCache.get(clean);
+
+    try {
+        // Query Philippines results first
+        const phUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(clean)}&countrycodes=ph&limit=6&addressdetails=1`;
+        const res = await fetch(phUrl, { headers: { 'Accept-Language': 'en' } });
+        let data = await res.json();
+
+        // If no results in PH, search globally
+        if (!data || data.length === 0) {
+            const globalUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(clean)}&limit=5&addressdetails=1`;
+            const gRes = await fetch(globalUrl, { headers: { 'Accept-Language': 'en' } });
+            data = await gRes.json();
+        }
+
+        geocodeCache.set(clean, data || []);
+        return data || [];
+    } catch (err) {
+        console.warn('Geocoding search error:', err);
+        return [];
+    }
+};
+
+const reverseGeocode = async (lat, lng) => {
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const data = await res.json();
+        if (data && data.display_name) {
+            const parts = data.display_name.split(', ');
+            return parts.slice(0, 3).join(', ');
+        }
+        return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    } catch (e) {
+        return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    }
+};
+
+// Generic Search Dropdown Binder
+const setupLocationSearch = (inputEl, clearBtnEl, resultsEl, onSelectCallback) => {
+    if (!inputEl || !resultsEl) return;
+
+    let debounceTimer = null;
+
+    const renderResults = (items) => {
+        resultsEl.innerHTML = '';
+        if (!items || items.length === 0) {
+            resultsEl.classList.add('hidden');
+            return;
+        }
+
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'p-3 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex items-start space-x-2.5';
+            
+            const parts = (item.display_name || '').split(', ');
+            const mainTitle = parts[0] || item.name || 'Location';
+            const subTitle = parts.slice(1, 4).join(', ');
+
+            div.innerHTML = `
+                <div class="p-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 shrink-0 mt-0.5">
+                    <i data-lucide="map-pin" class="h-4 w-4 text-red-500"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white truncate">${mainTitle}</p>
+                    <p class="text-[11px] text-gray-500 dark:text-slate-400 truncate">${subTitle}</p>
+                </div>
+            `;
+
+            div.addEventListener('click', () => {
+                inputEl.value = mainTitle;
+                resultsEl.classList.add('hidden');
+                if (clearBtnEl) clearBtnEl.classList.remove('hidden');
+                onSelectCallback(parseFloat(item.lat), parseFloat(item.lon), mainTitle);
+            });
+
+            resultsEl.appendChild(div);
+        });
+
+        resultsEl.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+    };
+
+    inputEl.addEventListener('input', () => {
+        const query = inputEl.value;
+        if (clearBtnEl) {
+            if (query.length > 0) clearBtnEl.classList.remove('hidden');
+            else clearBtnEl.classList.add('hidden');
+        }
+
+        clearTimeout(debounceTimer);
+        if (query.trim().length < 2) {
+            resultsEl.classList.add('hidden');
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            const results = await searchNominatim(query);
+            renderResults(results);
+        }, 280);
+    });
+
+    if (clearBtnEl) {
+        clearBtnEl.addEventListener('click', () => {
+            inputEl.value = '';
+            clearBtnEl.classList.add('hidden');
+            resultsEl.classList.add('hidden');
+            inputEl.focus();
+        });
+    }
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!inputEl.contains(e.target) && !resultsEl.contains(e.target)) {
+            resultsEl.classList.add('hidden');
+        }
+    });
+};
+
 // ==================== LEAFLET MAP ENGINE ====================
 const initMap = () => {
     if (leafletMap) return;
@@ -1083,28 +1205,29 @@ const initMap = () => {
 
     const isDarkMode = document.documentElement.classList.contains('dark');
     
-    // Create Leaflet Map centered in Manila
     leafletMap = L.map('map', {
         zoomControl: true,
         attributionControl: true
     }).setView(radiusOrigin, 9);
 
-    // Apply CartoDB Tiles (Dark / Light)
     updateMapTileLayer(isDarkMode);
 
-    // Map Click Handler for moving origin or setting route pins
-    leafletMap.on('click', (e) => {
+    leafletMap.on('click', async (e) => {
         const { lat, lng } = e.latlng;
         
         if (currentMapMode === 'radius') {
             radiusOrigin = [lat, lng];
             renderRadiusCircle();
+            const placeName = await reverseGeocode(lat, lng);
+            if (radiusSearchInput) {
+                radiusSearchInput.value = placeName;
+                if (radiusClearSearchBtn) radiusClearSearchBtn.classList.remove('hidden');
+            }
         } else if (currentMapMode === 'route') {
             handleRouteMapClick(lat, lng);
         }
     });
 
-    // Render initial radius
     renderRadiusCircle();
 };
 
@@ -1120,7 +1243,7 @@ const updateMapTileLayer = (isDark) => {
         : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
     currentTileLayer = L.tileLayer(tileUrl, {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
         maxZoom: 19,
         subdomains: 'abcd'
     }).addTo(leafletMap);
@@ -1138,7 +1261,6 @@ const updateMapPanelDefaults = () => {
     
     if (radiusSlider) {
         radiusSlider.max = Math.max(600, Math.round(fullRange * 1.3));
-        // If slider value exceeds new max or at default, adjust
         if (parseFloat(radiusSlider.value) > parseFloat(radiusSlider.max)) {
             radiusSlider.value = fullRange;
         }
@@ -1158,11 +1280,9 @@ const renderRadiusCircle = () => {
     const rangeKm = radiusSlider ? parseFloat(radiusSlider.value) : (specs.tankCapacity * avgEconomy);
     const radiusMeters = rangeKm * 1000;
 
-    // Remove existing circle and marker
     if (radiusCircle) leafletMap.removeLayer(radiusCircle);
     if (radiusMarker) leafletMap.removeLayer(radiusMarker);
 
-    // Only draw circle if in radius mode
     if (currentMapMode === 'radius') {
         radiusCircle = L.circle(radiusOrigin, {
             radius: radiusMeters,
@@ -1190,10 +1310,15 @@ const renderRadiusCircle = () => {
 
         radiusMarker = L.marker(radiusOrigin, { icon: pinIcon, draggable: true }).addTo(leafletMap);
         
-        radiusMarker.on('dragend', (e) => {
+        radiusMarker.on('dragend', async (e) => {
             const pos = e.target.getLatLng();
             radiusOrigin = [pos.lat, pos.lng];
             renderRadiusCircle();
+            const placeName = await reverseGeocode(pos.lat, pos.lng);
+            if (radiusSearchInput) {
+                radiusSearchInput.value = placeName;
+                if (radiusClearSearchBtn) radiusClearSearchBtn.classList.remove('hidden');
+            }
         });
 
         radiusMarker.bindPopup(`
@@ -1204,7 +1329,6 @@ const renderRadiusCircle = () => {
         `);
     }
 
-    // Update UI Stats
     if (radiusValLabel) radiusValLabel.textContent = `~${formatNumber(rangeKm, 0)} km`;
     
     const fuelNeeded = avgEconomy > 0 ? (rangeKm / avgEconomy) : 0;
@@ -1249,61 +1373,201 @@ document.querySelectorAll('.radius-preset-btn').forEach(btn => {
     });
 });
 
+// Radius Location Search Setup
+setupLocationSearch(radiusSearchInput, radiusClearSearchBtn, radiusSearchResults, (lat, lng, name) => {
+    radiusOrigin = [lat, lng];
+    if (leafletMap) {
+        leafletMap.setView(radiusOrigin, 10);
+    }
+    renderRadiusCircle();
+});
+
 // Locate Me button
-if (mapLocateBtn) {
-    mapLocateBtn.addEventListener('click', () => {
+const handleLocateMe = (btnEl) => {
+    if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser.');
+        return;
+    }
+    if (btnEl) {
+        btnEl.innerHTML = '<i data-lucide="loader-2" class="h-3.5 w-3.5 mr-1 animate-spin"></i> Locating...';
+        if (window.lucide) lucide.createIcons();
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+            radiusOrigin = [pos.coords.latitude, pos.coords.longitude];
+            if (leafletMap) {
+                leafletMap.setView(radiusOrigin, 11);
+            }
+            renderRadiusCircle();
+            const placeName = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+            if (radiusSearchInput) {
+                radiusSearchInput.value = placeName;
+                if (radiusClearSearchBtn) radiusClearSearchBtn.classList.remove('hidden');
+            }
+            if (btnEl) {
+                btnEl.innerHTML = '<i data-lucide="crosshair" class="h-3.5 w-3.5 mr-1"></i> My Location';
+                if (window.lucide) lucide.createIcons();
+            }
+        },
+        (err) => {
+            console.warn('Geolocation error:', err);
+            alert('Could not retrieve your location. Setting to Manila.');
+            if (btnEl) {
+                btnEl.innerHTML = '<i data-lucide="crosshair" class="h-3.5 w-3.5 mr-1"></i> My Location';
+                if (window.lucide) lucide.createIcons();
+            }
+        },
+        { enableHighAccuracy: true, timeout: 8000 }
+    );
+};
+
+if (mapLocateBtn) mapLocateBtn.addEventListener('click', () => handleLocateMe(mapLocateBtn));
+if (mapCanvasLocateBtn) mapCanvasLocateBtn.addEventListener('click', () => handleLocateMe(mapCanvasLocateBtn));
+
+// ==================== MAP: TRIP ROUTE & COST CALCULATOR ====================
+const popularRoutes = {
+    'tagaytay': { start: [14.5995, 120.9842], startName: 'Manila', end: [14.1153, 120.9621], endName: 'Tagaytay City' },
+    'baguio': { start: [14.5995, 120.9842], startName: 'Manila', end: [16.4023, 120.5960], endName: 'Baguio City' },
+    'launion': { start: [14.5995, 120.9842], startName: 'Manila', end: [16.6710, 120.3340], endName: 'San Juan, La Union' },
+    'subic': { start: [14.5995, 120.9842], startName: 'Manila', end: [14.8236, 120.2796], endName: 'Subic Bay' },
+    'batangas': { start: [14.5995, 120.9842], startName: 'Manila', end: [13.7565, 121.0450], endName: 'Batangas Port' },
+    'baler': { start: [14.5995, 120.9842], startName: 'Manila', end: [15.7594, 121.5624], endName: 'Baler, Aurora' },
+    'lucban': { start: [14.5995, 120.9842], startName: 'Manila', end: [14.1141, 121.5544], endName: 'Lucban, Quezon' },
+    'naga': { start: [14.5995, 120.9842], startName: 'Manila', end: [13.6218, 123.1948], endName: 'Naga City' }
+};
+
+// Route Origin Location Search Setup
+setupLocationSearch(routeOriginInput, routeOriginClear, routeOriginResults, (lat, lng, name) => {
+    routePinA = [lat, lng];
+    renderRouteMarkers();
+    if (routePinB) {
+        calculateAndDrawRoute();
+    } else if (leafletMap) {
+        leafletMap.setView(routePinA, 11);
+    }
+});
+
+// Route Destination Location Search Setup
+setupLocationSearch(routeDestInput, routeDestClear, routeDestResults, (lat, lng, name) => {
+    routePinB = [lat, lng];
+    renderRouteMarkers();
+    if (routePinA) {
+        calculateAndDrawRoute();
+    } else if (leafletMap) {
+        leafletMap.setView(routePinB, 11);
+    }
+});
+
+// Floating Quick Search Setup
+setupLocationSearch(mapQuickSearchInput, mapQuickSearchClear, mapQuickSearchResults, (lat, lng, name) => {
+    if (leafletMap) {
+        leafletMap.setView([lat, lng], 12);
+    }
+    if (currentMapMode === 'radius') {
+        radiusOrigin = [lat, lng];
+        if (radiusSearchInput) radiusSearchInput.value = name;
+        renderRadiusCircle();
+    } else {
+        if (!routePinA) {
+            routePinA = [lat, lng];
+            if (routeOriginInput) routeOriginInput.value = name;
+            renderRouteMarkers();
+        } else {
+            routePinB = [lat, lng];
+            if (routeDestInput) routeDestInput.value = name;
+            renderRouteMarkers();
+            calculateAndDrawRoute();
+        }
+    }
+});
+
+// Swap Route Origin & Destination
+if (swapRouteBtn) {
+    swapRouteBtn.addEventListener('click', () => {
+        const tempPin = routePinA;
+        routePinA = routePinB;
+        routePinB = tempPin;
+
+        if (routeOriginInput && routeDestInput) {
+            const tempVal = routeOriginInput.value;
+            routeOriginInput.value = routeDestInput.value;
+            routeDestInput.value = tempVal;
+        }
+
+        renderRouteMarkers();
+        if (routePinA && routePinB) {
+            calculateAndDrawRoute();
+        }
+    });
+}
+
+// Route Start GPS Locate
+if (routeLocateStartBtn) {
+    routeLocateStartBtn.addEventListener('click', () => {
         if (!navigator.geolocation) {
             alert('Geolocation is not supported by your browser.');
             return;
         }
-        mapLocateBtn.innerHTML = '<i data-lucide="loader-2" class="h-3.5 w-3.5 mr-1 animate-spin"></i> Locating...';
+        routeLocateStartBtn.innerHTML = '<i data-lucide="loader-2" class="h-3 w-3 mr-0.5 animate-spin"></i> Locating...';
         if (window.lucide) lucide.createIcons();
 
         navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                radiusOrigin = [pos.coords.latitude, pos.coords.longitude];
-                if (leafletMap) {
-                    leafletMap.setView(radiusOrigin, 10);
+            async (pos) => {
+                routePinA = [pos.coords.latitude, pos.coords.longitude];
+                const placeName = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                if (routeOriginInput) {
+                    routeOriginInput.value = placeName;
+                    if (routeOriginClear) routeOriginClear.classList.remove('hidden');
                 }
-                renderRadiusCircle();
-                mapLocateBtn.innerHTML = '<i data-lucide="crosshair" class="h-3.5 w-3.5 mr-1"></i> My Location';
+                renderRouteMarkers();
+                if (routePinB) {
+                    calculateAndDrawRoute();
+                } else if (leafletMap) {
+                    leafletMap.setView(routePinA, 11);
+                }
+                routeLocateStartBtn.innerHTML = '<i data-lucide="crosshair" class="h-3 w-3 mr-0.5"></i> My GPS';
                 if (window.lucide) lucide.createIcons();
             },
             (err) => {
-                console.warn('Geolocation error:', err);
-                alert('Could not retrieve your location. Setting to Manila.');
-                mapLocateBtn.innerHTML = '<i data-lucide="crosshair" class="h-3.5 w-3.5 mr-1"></i> My Location';
+                alert('Could not retrieve your GPS location.');
+                routeLocateStartBtn.innerHTML = '<i data-lucide="crosshair" class="h-3 w-3 mr-0.5"></i> My GPS';
                 if (window.lucide) lucide.createIcons();
-            },
-            { enableHighAccuracy: true, timeout: 8000 }
+            }
         );
     });
 }
 
-// ==================== MAP: TRIP ROUTE & COST CALCULATOR ====================
-const popularRoutes = {
-    'tagaytay': { start: [14.5995, 120.9842], end: [14.1153, 120.9621], name: 'Manila ➔ Tagaytay' },
-    'baguio': { start: [14.5995, 120.9842], end: [16.4023, 120.5960], name: 'Manila ➔ Baguio' },
-    'launion': { start: [14.5995, 120.9842], end: [16.6710, 120.3340], name: 'Manila ➔ San Juan, La Union' },
-    'subic': { start: [14.5995, 120.9842], end: [14.8236, 120.2796], name: 'Manila ➔ Subic Bay' },
-    'batangas': { start: [14.5995, 120.9842], end: [13.7565, 121.0450], name: 'Manila ➔ Batangas Port' },
-    'baler': { start: [14.5995, 120.9842], end: [15.7594, 121.5624], name: 'Manila ➔ Baler' },
-    'lucban': { start: [14.5995, 120.9842], end: [14.1141, 121.5544], name: 'Manila ➔ Lucban, Quezon' },
-    'naga': { start: [14.5995, 120.9842], end: [13.6218, 123.1948], name: 'Manila ➔ Naga City' }
-};
+const handleRouteMapClick = async (lat, lng) => {
+    const placeName = await reverseGeocode(lat, lng);
 
-const handleRouteMapClick = (lat, lng) => {
     if (!routePinA) {
         routePinA = [lat, lng];
+        if (routeOriginInput) {
+            routeOriginInput.value = placeName;
+            if (routeOriginClear) routeOriginClear.classList.remove('hidden');
+        }
         renderRouteMarkers();
     } else if (!routePinB) {
         routePinB = [lat, lng];
+        if (routeDestInput) {
+            routeDestInput.value = placeName;
+            if (routeDestClear) routeDestClear.classList.remove('hidden');
+        }
         renderRouteMarkers();
         calculateAndDrawRoute();
     } else {
-        // Reset and start new Pin A
+        // Reset and set new Pin A
         routePinA = [lat, lng];
         routePinB = null;
+        if (routeOriginInput) {
+            routeOriginInput.value = placeName;
+            if (routeOriginClear) routeOriginClear.classList.remove('hidden');
+        }
+        if (routeDestInput) {
+            routeDestInput.value = '';
+            if (routeDestClear) routeDestClear.classList.add('hidden');
+        }
         if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
         renderRouteMarkers();
     }
@@ -1322,8 +1586,17 @@ const renderRouteMarkers = () => {
             </div>
         `;
         markerPinA = L.marker(routePinA, {
-            icon: L.divIcon({ html: pinAHtml, className: 'custom-pin-a', iconSize: [32, 32], iconAnchor: [16, 16] })
-        }).addTo(leafletMap).bindPopup('<b>Starting Point A</b>');
+            icon: L.divIcon({ html: pinAHtml, className: 'custom-pin-a', iconSize: [32, 32], iconAnchor: [16, 16] }),
+            draggable: true
+        }).addTo(leafletMap).bindPopup('<b>Starting Point (A)</b>');
+
+        markerPinA.on('dragend', async (e) => {
+            const pos = e.target.getLatLng();
+            routePinA = [pos.lat, pos.lng];
+            const name = await reverseGeocode(pos.lat, pos.lng);
+            if (routeOriginInput) routeOriginInput.value = name;
+            if (routePinB) calculateAndDrawRoute();
+        });
     }
 
     if (routePinB) {
@@ -1333,8 +1606,17 @@ const renderRouteMarkers = () => {
             </div>
         `;
         markerPinB = L.marker(routePinB, {
-            icon: L.divIcon({ html: pinBHtml, className: 'custom-pin-b', iconSize: [32, 32], iconAnchor: [16, 16] })
-        }).addTo(leafletMap).bindPopup('<b>Destination Point B</b>');
+            icon: L.divIcon({ html: pinBHtml, className: 'custom-pin-b', iconSize: [32, 32], iconAnchor: [16, 16] }),
+            draggable: true
+        }).addTo(leafletMap).bindPopup('<b>Destination Point (B)</b>');
+
+        markerPinB.on('dragend', async (e) => {
+            const pos = e.target.getLatLng();
+            routePinB = [pos.lat, pos.lng];
+            const name = await reverseGeocode(pos.lat, pos.lng);
+            if (routeDestInput) routeDestInput.value = name;
+            if (routePinA) calculateAndDrawRoute();
+        });
     }
 };
 
@@ -1359,7 +1641,6 @@ const calculateAndDrawRoute = async () => {
             const distanceKm = route.distance / 1000;
             const durationSec = route.duration;
             
-            // Draw Polyline
             if (routeGeoJsonLayer && leafletMap) {
                 leafletMap.removeLayer(routeGeoJsonLayer);
             }
@@ -1376,7 +1657,6 @@ const calculateAndDrawRoute = async () => {
 
             updateRouteResults(distanceKm, durationSec);
         } else {
-            // Fallback straight line
             fallbackStraightLineRoute(lat1, lon1, lat2, lon2);
         }
     } catch (e) {
@@ -1386,14 +1666,14 @@ const calculateAndDrawRoute = async () => {
 };
 
 const fallbackStraightLineRoute = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // Earth radius in km
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
               Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const straightKm = (R * c) * 1.35; // Multiply by road circuity factor
+    const straightKm = (R * c) * 1.35;
     const durationSec = (straightKm / 45) * 3600;
 
     if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
@@ -1423,7 +1703,6 @@ const updateRouteResults = (distanceKm, durationSec) => {
     const tripCost = fuelConsumed * latestPrice;
     const tankPctUsed = specs.tankCapacity > 0 ? ((fuelConsumed / specs.tankCapacity) * 100) : 0;
 
-    // Format Duration
     const hrs = Math.floor(totalSec / 3600);
     const mins = Math.round((totalSec % 3600) / 60);
     const timeStr = hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`;
@@ -1434,7 +1713,6 @@ const updateRouteResults = (distanceKm, durationSec) => {
     if (routeTankPctVal) routeTankPctVal.textContent = `${formatNumber(tankPctUsed, 1)}% of ${specs.tankCapacity}L Tank`;
     if (routeCostVal) routeCostVal.textContent = formatCurrency(tripCost);
 
-    // Refuel warning
     if (routeRefuelWarning) {
         if (fuelConsumed > specs.tankCapacity || totalKm > fullRange) {
             routeRefuelWarning.classList.remove('hidden');
@@ -1452,6 +1730,11 @@ if (presetRouteSelect) {
         const p = popularRoutes[val];
         routePinA = p.start;
         routePinB = p.end;
+        if (routeOriginInput) routeOriginInput.value = p.startName;
+        if (routeDestInput) routeDestInput.value = p.endName;
+        if (routeOriginClear) routeOriginClear.classList.remove('hidden');
+        if (routeDestClear) routeDestClear.classList.remove('hidden');
+
         renderRouteMarkers();
         calculateAndDrawRoute();
     });
@@ -1472,6 +1755,10 @@ if (resetRouteBtn) {
         if (markerPinA && leafletMap) leafletMap.removeLayer(markerPinA);
         if (markerPinB && leafletMap) leafletMap.removeLayer(markerPinB);
         if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
+        if (routeOriginInput) routeOriginInput.value = '';
+        if (routeDestInput) routeDestInput.value = '';
+        if (routeOriginClear) routeOriginClear.classList.add('hidden');
+        if (routeDestClear) routeDestClear.classList.add('hidden');
         if (presetRouteSelect) presetRouteSelect.value = '';
         if (routeDistanceVal) routeDistanceVal.textContent = '-- km';
         if (routeTimeVal) routeTimeVal.textContent = '--';
@@ -1494,7 +1781,6 @@ if (modeBtnRadius && modeBtnRoute && panelRadius && panelRoute) {
         
         if (mapStatusHint) mapStatusHint.textContent = 'Range Radius: Active';
 
-        // Clear route layers and show radius
         if (markerPinA && leafletMap) leafletMap.removeLayer(markerPinA);
         if (markerPinB && leafletMap) leafletMap.removeLayer(markerPinB);
         if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
@@ -1509,9 +1795,8 @@ if (modeBtnRadius && modeBtnRoute && panelRadius && panelRoute) {
         panelRoute.classList.remove('hidden');
         panelRadius.classList.add('hidden');
         
-        if (mapStatusHint) mapStatusHint.textContent = 'Trip Planner: Click map for Pin A & B';
+        if (mapStatusHint) mapStatusHint.textContent = 'Google Maps Route Planner: Active';
 
-        // Hide radius circle & marker
         if (radiusCircle && leafletMap) leafletMap.removeLayer(radiusCircle);
         if (radiusMarker && leafletMap) leafletMap.removeLayer(radiusMarker);
         renderRouteMarkers();
@@ -1537,14 +1822,12 @@ const applyTheme = (theme) => {
     localStorage.setItem('theme', theme);
     if (window.lucide) lucide.createIcons();
     
-    // Refresh chart with updated theme colors
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
     if (profileRecords.length > 0) {
         updateChart(processRecords(profileRecords));
     }
 
-    // Update map tile layers
     updateMapTileLayer(isDark);
 };
 
@@ -1882,7 +2165,6 @@ updateOdometerHints();
 renderServiceReminders();
 updateVehicleSpecsAndRange(0, 0, 0);
 
-// Initialize Theme
 const savedTheme = localStorage.getItem('theme');
 if (savedTheme) {
     applyTheme(savedTheme);

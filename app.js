@@ -130,6 +130,16 @@ const lastDateHint = document.getElementById('last-date-hint');
 const maintLastOdoHint = document.getElementById('maint-last-odo-hint');
 const maintLastDateHint = document.getElementById('maint-last-date-hint');
 
+// Vehicle Specs & Range Estimator Elements
+const specVehicleName = document.getElementById('spec-vehicle-name');
+const specFuelBadge = document.getElementById('spec-fuel-badge');
+const specFuelDesc = document.getElementById('spec-fuel-desc');
+const specTankSize = document.getElementById('spec-tank-size');
+const specFullRange = document.getElementById('spec-full-range');
+const specFullCost = document.getElementById('spec-full-cost');
+const editSpecsBtn = document.getElementById('edit-specs-btn');
+const litersPercentHint = document.getElementById('liters-percent-hint');
+
 let editingId = null;
 let chartInstance = null;
 
@@ -169,6 +179,123 @@ let editingMaintId = null;
 // State
 let records = [];
 let maintRecords = [];
+
+// ==================== VEHICLE SPECIFICATIONS & PRESETS ====================
+const defaultVehicleSpecs = {
+    'ADV 150': {
+        tankCapacity: 8.0,
+        fuelGrade: '91 RON Unleaded',
+        fuelDesc: 'Recommended: Regular Unleaded (Petron Xtra, Shell FuelSave 91, Caltex Silver)'
+    },
+    'Chery': {
+        tankCapacity: 51.0,
+        fuelGrade: '95 RON Premium',
+        fuelDesc: 'Recommended: Premium Unleaded (Petron XCS 95, Shell V-Power 95, Caltex Platinum)'
+    },
+    'Chery Tiggo 8 Pro': {
+        tankCapacity: 51.0,
+        fuelGrade: '95 RON Premium',
+        fuelDesc: 'Recommended: Premium Unleaded (Petron XCS 95, Shell V-Power 95, Caltex Platinum)'
+    },
+    'Tiggo 8 Pro': {
+        tankCapacity: 51.0,
+        fuelGrade: '95 RON Premium',
+        fuelDesc: 'Recommended: Premium Unleaded (Petron XCS 95, Shell V-Power 95, Caltex Platinum)'
+    }
+};
+
+const getVehicleSpecs = (profileName) => {
+    const p = (profileName === 'Cherry') ? 'Chery' : profileName;
+    const stored = localStorage.getItem(`vehicle_spec_${p}`);
+    if (stored) {
+        try { return JSON.parse(stored); } catch (e) { }
+    }
+    if (defaultVehicleSpecs[p]) {
+        return defaultVehicleSpecs[p];
+    }
+    // Generic fallback for custom vehicles
+    return {
+        tankCapacity: 45.0,
+        fuelGrade: '91/95 RON',
+        fuelDesc: 'Recommended: Unleaded Gasoline'
+    };
+};
+
+const saveVehicleSpecs = (profileName, specs) => {
+    const p = (profileName === 'Cherry') ? 'Chery' : profileName;
+    localStorage.setItem(`vehicle_spec_${p}`, JSON.stringify(specs));
+};
+
+const updateVehicleSpecsAndRange = (avgEconomy, latestPrice) => {
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const specs = getVehicleSpecs(currentProfileName);
+
+    if (specVehicleName) specVehicleName.textContent = currentProfileName;
+    if (specFuelBadge) specFuelBadge.innerHTML = `<i data-lucide="check-circle-2" class="h-3 w-3 mr-1 inline"></i> ${specs.fuelGrade}`;
+    if (specFuelDesc) specFuelDesc.textContent = specs.fuelDesc;
+    if (specTankSize) specTankSize.textContent = `${formatNumber(specs.tankCapacity, 1)} L`;
+
+    if (specFullRange) {
+        if (avgEconomy > 0) {
+            const range = specs.tankCapacity * avgEconomy;
+            specFullRange.textContent = `~${formatNumber(range, 0)} km`;
+        } else {
+            specFullRange.textContent = '-- km';
+        }
+    }
+
+    if (specFullCost) {
+        if (latestPrice > 0) {
+            const cost = specs.tankCapacity * latestPrice;
+            specFullCost.textContent = formatCurrency(cost);
+        } else {
+            specFullCost.textContent = '₱--';
+        }
+    }
+
+    updateLitersPercentHint();
+    if (window.lucide) lucide.createIcons();
+};
+
+const updateLitersPercentHint = () => {
+    if (!litersPercentHint) return;
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const specs = getVehicleSpecs(currentProfileName);
+    const litersVal = parseFloat(litersInput.value) || 0;
+    
+    if (litersVal > 0 && specs.tankCapacity > 0) {
+        const pct = ((litersVal / specs.tankCapacity) * 100).toFixed(1);
+        litersPercentHint.textContent = `${pct}% of ${specs.tankCapacity}L tank filled`;
+        litersPercentHint.className = 'text-[11px] text-blue-600 font-semibold mt-1 block';
+    } else {
+        litersPercentHint.textContent = `Tank capacity: ${specs.tankCapacity} L`;
+        litersPercentHint.className = 'text-[11px] text-gray-500 mt-1 block';
+    }
+};
+
+if (litersInput) {
+    litersInput.addEventListener('input', updateLitersPercentHint);
+}
+
+if (editSpecsBtn) {
+    editSpecsBtn.addEventListener('click', () => {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const specs = getVehicleSpecs(currentProfileName);
+        
+        const newTank = prompt(`Enter fuel tank capacity in Liters for "${currentProfileName}":`, specs.tankCapacity);
+        if (newTank && !isNaN(newTank) && parseFloat(newTank) > 0) {
+            specs.tankCapacity = parseFloat(newTank);
+        }
+
+        const newGrade = prompt(`Enter recommended fuel octane/grade for "${currentProfileName}" (e.g. 91 RON Unleaded, 95 RON Premium):`, specs.fuelGrade);
+        if (newGrade && newGrade.trim()) {
+            specs.fuelGrade = newGrade.trim();
+        }
+
+        saveVehicleSpecs(currentProfileName, specs);
+        renderTable();
+    });
+}
 
 // Load and migrate profiles (e.g. Cherry -> Chery)
 let loadedProfiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
@@ -553,7 +680,7 @@ if (profileSelect) {
 
 if (addProfileBtn) {
     addProfileBtn.addEventListener('click', () => {
-        const newProfile = prompt('Enter new vehicle name (e.g. Chery, Civic, NMAX):');
+        const newProfile = prompt('Enter new vehicle name (e.g. Chery Tiggo 8 Pro, Civic, NMAX):');
         if (newProfile && newProfile.trim() !== '') {
             let trimmed = newProfile.trim();
             if (trimmed.toLowerCase() === 'cherry') trimmed = 'Chery';
@@ -580,6 +707,7 @@ if (cancelEditBtn) {
         calculatedTotal.textContent = '₱0.00';
         submitBtn.textContent = 'Save Record';
         cancelEditBtn.classList.add('hidden');
+        updateLitersPercentHint();
     });
 }
 
@@ -593,6 +721,7 @@ window.editRecord = (id) => {
     litersInput.value = record.liters;
     priceInput.value = record.pricePerLiter;
     calculateFormTotal();
+    updateLitersPercentHint();
     
     submitBtn.textContent = 'Update Record';
     cancelEditBtn.classList.remove('hidden');
@@ -762,6 +891,9 @@ const updateStats = (processedData) => {
         statMonthlyLiters.textContent = "-- L / month";
         statTrueCost.textContent = "₱--";
         statTotalDist.textContent = "-- km";
+        
+        const latestPrice = processedData.length === 1 ? (processedData[0].pricePerLiter || 0) : 0;
+        updateVehicleSpecsAndRange(0, latestPrice);
         return;
     }
 
@@ -812,6 +944,10 @@ const updateStats = (processedData) => {
     statMonthlyLiters.textContent = `~${formatNumber(monthlyLiters)} L / month (30d)`;
     statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
     statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
+
+    // Update Tank Specs & Range Estimator Bar
+    const latestPrice = latestRecord.pricePerLiter || 0;
+    updateVehicleSpecsAndRange(avgEconomy, latestPrice);
 };
 
 // Render Tables
@@ -821,6 +957,7 @@ const renderTable = () => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
     const tableEl = document.querySelector('#view-fuel table');
+    const specs = getVehicleSpecs(currentProfileName);
     
     if (profileRecords.length === 0) {
         if (emptyState) emptyState.classList.remove('hidden');
@@ -831,6 +968,7 @@ const renderTable = () => {
             chartInstance = null;
         }
         updateOdometerHints();
+        updateVehicleSpecsAndRange(0, 0);
         return;
     }
 
@@ -846,12 +984,17 @@ const renderTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
+        const pctTank = (row.liters > 0 && specs.tankCapacity > 0) ? `(${((row.liters / specs.tankCapacity) * 100).toFixed(0)}% tank)` : '';
+
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.tripKm !== null ? row.tripKm : '-'}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatNumber(row.liters)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-600 font-medium bg-amber-50">${formatCurrency(row.pricePerLiter)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50/50">
+                <div class="text-amber-700 font-semibold">${formatNumber(row.liters)} L</div>
+                <div class="text-[10px] text-gray-500 font-medium">${pctTank}</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-700 font-medium bg-amber-50/50">${formatCurrency(row.pricePerLiter)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">${row.pesoPerKm !== null ? formatCurrency(row.pesoPerKm) : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
@@ -961,6 +1104,7 @@ if (form) {
             priceInput.value = '';
             calculatedTotal.textContent = '₱0.00';
             dateInput.valueAsDate = new Date();
+            updateLitersPercentHint();
 
             submitBtn.textContent = 'Saved!';
             submitBtn.classList.replace('bg-blue-600', 'bg-green-600');
@@ -1077,3 +1221,4 @@ onSnapshot(collection(db, "maintRecords"), (snapshot) => {
 renderProfiles();
 updateOdometerHints();
 renderServiceReminders();
+updateVehicleSpecsAndRange(0, 0);

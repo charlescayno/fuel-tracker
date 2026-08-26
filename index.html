@@ -157,6 +157,48 @@
             </div>
         </div>
 
+        <!-- Vehicle Specifications & Tank Range Estimator Bar -->
+        <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 rounded-xl shadow-md text-white p-4 sm:p-5 mb-6 border border-blue-900/40">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                
+                <!-- Vehicle Info & Fuel Recommendation -->
+                <div class="flex items-center space-x-3.5">
+                    <div class="p-3 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-400/20 shrink-0">
+                        <i data-lucide="gauge" class="h-6 w-6"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+                            <h3 id="spec-vehicle-name" class="font-bold text-base sm:text-lg text-white">ADV 150</h3>
+                            <span id="spec-fuel-badge" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center">
+                                <i data-lucide="check-circle-2" class="h-3 w-3 mr-1 inline"></i> 91 RON Unleaded
+                            </span>
+                            <button id="edit-specs-btn" class="text-gray-400 hover:text-white p-1 transition-colors" title="Adjust vehicle tank capacity & specs">
+                                <i data-lucide="settings" class="h-3.5 w-3.5"></i>
+                            </button>
+                        </div>
+                        <p id="spec-fuel-desc" class="text-xs text-blue-200/90 mt-0.5">Recommended Fuel: Regular Unleaded (Petron Xtra, Shell FuelSave 91, Caltex Silver)</p>
+                    </div>
+                </div>
+
+                <!-- Tank Capacity & Range Estimator Widgets -->
+                <div class="grid grid-cols-3 gap-3 sm:gap-6 border-t lg:border-t-0 border-white/10 pt-3 lg:pt-0">
+                    <div class="bg-white/5 rounded-lg p-2.5 sm:p-3 border border-white/10 text-center sm:text-left">
+                        <span class="block text-[10px] sm:text-[11px] text-blue-200/80 uppercase tracking-wider font-semibold">Tank Size</span>
+                        <span id="spec-tank-size" class="text-sm sm:text-base md:text-lg font-bold text-white">8.0 L</span>
+                    </div>
+                    <div class="bg-white/5 rounded-lg p-2.5 sm:p-3 border border-white/10 text-center sm:text-left">
+                        <span class="block text-[10px] sm:text-[11px] text-emerald-300 uppercase tracking-wider font-semibold">Est. Full Range</span>
+                        <span id="spec-full-range" class="text-sm sm:text-base md:text-lg font-bold text-emerald-400">~360 km</span>
+                    </div>
+                    <div class="bg-white/5 rounded-lg p-2.5 sm:p-3 border border-white/10 text-center sm:text-left">
+                        <span class="block text-[10px] sm:text-[11px] text-amber-300 uppercase tracking-wider font-semibold">Full Tank Cost</span>
+                        <span id="spec-full-cost" class="text-sm sm:text-base md:text-lg font-bold text-amber-300">₱--</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
         <!-- Tab Navigation -->
         <div class="flex border-b border-gray-200 mb-6">
             <button id="tab-fuel" class="py-2.5 px-5 border-b-2 border-blue-600 text-blue-600 font-semibold text-sm focus:outline-none transition-colors flex items-center">
@@ -228,6 +270,7 @@
                                         <label for="liters" class="block text-sm font-medium text-gray-700 mb-1">Liters</label>
                                         <input type="number" id="liters" step="any" required placeholder="e.g. 4.57"
                                             class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <span id="liters-percent-hint" class="text-[11px] text-gray-500 mt-1 block"></span>
                                     </div>
                                     <div>
                                         <label for="price" class="block text-sm font-medium text-gray-700 mb-1">Price/Liter</label>
@@ -281,8 +324,8 @@
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Date</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Odo (km)</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Trip (km)</th>
-                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Liters</th>
-                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Price/L</th>
+                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-amber-50/60">Liters (% Tank)</th>
+                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-amber-50/60">Price/L</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Amount</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-blue-50">₱/km</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-green-50">km/L</th>
@@ -457,7 +500,7 @@
 
     </main>
 
-    <script type="module" src="app.js?v=3.2"></script>
+    <script type="module" src="app.js?v=3.3"></script>
     <script>
         // Initialize Lucide icons on initial load
         lucide.createIcons();

@@ -117,6 +117,7 @@ const litersInput = document.getElementById('liters');
 const priceInput = document.getElementById('price');
 const calculatedTotal = document.getElementById('calculated-total');
 const calculatedRange = document.getElementById('calculated-range');
+const calculatedCostPerKm = document.getElementById('calculated-cost-per-km');
 const historyTableBody = document.getElementById('history-table-body');
 const emptyState = document.getElementById('empty-state');
 const clearDataBtn = document.getElementById('clear-data-btn');
@@ -140,6 +141,7 @@ const specFuelDesc = document.getElementById('spec-fuel-desc');
 const specTankSize = document.getElementById('spec-tank-size');
 const specFullRange = document.getElementById('spec-full-range');
 const specFullCost = document.getElementById('spec-full-cost');
+const specCostPerKm = document.getElementById('spec-cost-per-km');
 const editSpecsBtn = document.getElementById('edit-specs-btn');
 const litersPercentHint = document.getElementById('liters-percent-hint');
 
@@ -307,7 +309,7 @@ const getVehicleAvgEconomy = (profileName) => {
     return p.toLowerCase().includes('adv') ? 45.0 : 10.5;
 };
 
-const updateVehicleSpecsAndRange = (avgEconomy, latestPrice) => {
+const updateVehicleSpecsAndRange = (avgEconomy, latestPrice, fuelCostPerKm = 0) => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const specs = getVehicleSpecs(currentProfileName);
 
@@ -342,6 +344,16 @@ const updateVehicleSpecsAndRange = (avgEconomy, latestPrice) => {
         }
     }
 
+    if (specCostPerKm) {
+        if (fuelCostPerKm > 0) {
+            specCostPerKm.textContent = `${formatCurrency(fuelCostPerKm)}/km`;
+        } else if (latestPrice > 0 && avgEconomy > 0) {
+            specCostPerKm.textContent = `${formatCurrency(latestPrice / avgEconomy)}/km`;
+        } else {
+            specCostPerKm.textContent = '₱--/km';
+        }
+    }
+
     updateLitersPercentHint();
     if (window.lucide) lucide.createIcons();
 };
@@ -368,10 +380,11 @@ const calculateFormTotal = () => {
     const total = liters * price;
     if (calculatedTotal) calculatedTotal.textContent = formatCurrency(total);
 
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const avgEconomy = getVehicleAvgEconomy(currentProfileName);
+
     // Live Range Added calculation
     if (calculatedRange) {
-        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-        const avgEconomy = getVehicleAvgEconomy(currentProfileName);
         if (liters > 0 && avgEconomy > 0) {
             const rangeAdded = liters * avgEconomy;
             calculatedRange.textContent = `+${formatNumber(rangeAdded, 1)} km`;
@@ -379,6 +392,17 @@ const calculateFormTotal = () => {
             calculatedRange.textContent = '+0 km';
         }
     }
+
+    // Live Cost / km calculation
+    if (calculatedCostPerKm) {
+        if (price > 0 && avgEconomy > 0) {
+            const costPerKm = price / avgEconomy;
+            calculatedCostPerKm.textContent = `${formatCurrency(costPerKm)}/km`;
+        } else {
+            calculatedCostPerKm.textContent = '₱0.00/km';
+        }
+    }
+
     updateLitersPercentHint();
 };
 
@@ -812,6 +836,7 @@ if (cancelEditBtn) {
         dateInput.valueAsDate = new Date();
         calculatedTotal.textContent = '₱0.00';
         if (calculatedRange) calculatedRange.textContent = '+0 km';
+        if (calculatedCostPerKm) calculatedCostPerKm.textContent = '₱0.00/km';
         submitBtn.textContent = 'Save Record';
         cancelEditBtn.classList.add('hidden');
         updateLitersPercentHint();
@@ -999,7 +1024,7 @@ const updateStats = (processedData) => {
         statTotalDist.textContent = "-- km";
         
         const latestPrice = processedData.length === 1 ? (processedData[0].pricePerLiter || 0) : 0;
-        updateVehicleSpecsAndRange(0, latestPrice);
+        updateVehicleSpecsAndRange(0, latestPrice, 0);
         return;
     }
 
@@ -1051,9 +1076,9 @@ const updateStats = (processedData) => {
     statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
     statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
 
-    // Update Tank Specs & Range Estimator Bar
+    // Update Tank Specs & Range Estimator Bar with Cost/km
     const latestPrice = latestRecord.pricePerLiter || 0;
-    updateVehicleSpecsAndRange(avgEconomy, latestPrice);
+    updateVehicleSpecsAndRange(avgEconomy, latestPrice, fuelCostPerKm);
 };
 
 // Render Tables
@@ -1075,7 +1100,7 @@ const renderTable = () => {
             chartInstance = null;
         }
         updateOdometerHints();
-        updateVehicleSpecsAndRange(0, 0);
+        updateVehicleSpecsAndRange(0, 0, 0);
         return;
     }
 
@@ -1109,7 +1134,9 @@ const renderTable = () => {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-700 font-medium bg-amber-50/50">${formatCurrency(row.pricePerLiter)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 font-medium bg-blue-50">${row.pesoPerKm !== null ? formatCurrency(row.pesoPerKm) : '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-blue-50/70 border-x border-blue-100/60">
+                ${row.pesoPerKm !== null ? `<span class="inline-flex items-center text-xs font-bold text-blue-700 bg-white px-2 py-0.5 rounded shadow-2xs border border-blue-200">${formatCurrency(row.pesoPerKm)}/km</span>` : '<span class="text-gray-400">-</span>'}
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-700 font-medium bg-green-50">${row.kmPerLiter !== null ? formatNumber(row.kmPerLiter) : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50">
                 <div class="text-amber-900 font-bold">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</div>
@@ -1217,6 +1244,7 @@ if (form) {
             priceInput.value = '';
             calculatedTotal.textContent = '₱0.00';
             if (calculatedRange) calculatedRange.textContent = '+0 km';
+            if (calculatedCostPerKm) calculatedCostPerKm.textContent = '₱0.00/km';
             dateInput.valueAsDate = new Date();
             updateLitersPercentHint();
 
@@ -1335,4 +1363,4 @@ onSnapshot(collection(db, "maintRecords"), (snapshot) => {
 renderProfiles();
 updateOdometerHints();
 renderServiceReminders();
-updateVehicleSpecsAndRange(0, 0);
+updateVehicleSpecsAndRange(0, 0, 0);

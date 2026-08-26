@@ -131,7 +131,9 @@ const lastDateHint = document.getElementById('last-date-hint');
 const maintLastOdoHint = document.getElementById('maint-last-odo-hint');
 const maintLastDateHint = document.getElementById('maint-last-date-hint');
 
-// Vehicle Specs & Range Estimator Elements
+// Vehicle Specs, Logo & Range Estimator Elements
+const navbarVehicleLogo = document.getElementById('navbar-vehicle-logo');
+const vehicleLogoBadge = document.getElementById('vehicle-logo-badge');
 const specVehicleName = document.getElementById('spec-vehicle-name');
 const specFuelBadge = document.getElementById('spec-fuel-badge');
 const specFuelDesc = document.getElementById('spec-fuel-desc');
@@ -180,6 +182,71 @@ let editingMaintId = null;
 // State
 let records = [];
 let maintRecords = [];
+
+// ==================== VEHICLE LOGOS & ICONS ====================
+const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
+    const p = (profileName || '').toLowerCase();
+    
+    // Honda (ADV 150, PCX, Click, Civic, CRV, City, etc.)
+    if (p.includes('honda') || p.includes('adv') || p.includes('pcx') || p.includes('click') || p.includes('beat') || p.includes('wave') || p.includes('civic') || p.includes('city') || p.includes('crv')) {
+        return `
+            <svg class="${cssClass} text-red-500 hover:text-red-400 transition-colors" viewBox="0 0 100 82" fill="currentColor" xmlns="http://www.w3.org/2000/svg" title="Honda">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M50 0C32.5 0 16.5 2.1 7.2 5.8 5.1 6.6 4 8.7 4.2 10.9l4.5 48.6c.5 5.5 4.8 9.8 10.3 10.4 8.6 1 20 1.6 31 1.6s22.4-.6 31-1.6c5.5-.6 9.8-4.9 10.3-10.4l4.5-48.6c.2-2.2-.9-4.3-3-5.1C83.5 2.1 67.5 0 50 0zm0 7.8c15.8 0 30.1 1.8 37.8 4.7l-3.8 41.5c-.2 2.2-2 3.9-4.2 4.1-7.2.8-17.7 1.4-29.8 1.4s-22.6-.6-29.8-1.4c-2.2-.2-4-1.9-4.2-4.1L12.2 12.5C19.9 9.6 34.2 7.8 50 7.8zm-22.5 13.5l5.5 35.8h7.5l-3.2-20.8h25.4l-3.2 20.8h7.5l5.5-35.8h-7.6l-2.4 15.6H37.5l-2.4-15.6H27.5z"/>
+            </svg>
+        `;
+    }
+
+    // Chery (Chery Tiggo 8, Tiggo 8 Pro, Tiggo 7, Arrizo, Omoda, etc.)
+    if (p.includes('chery') || p.includes('cherry') || p.includes('tiggo') || p.includes('arrizo') || p.includes('omoda') || p.includes('jaecoo')) {
+        return `
+            <svg class="${cssClass} text-red-500 hover:text-red-400 transition-colors" viewBox="0 0 100 68" fill="currentColor" xmlns="http://www.w3.org/2000/svg" title="Chery">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M50 4C26.5 4 7 15.5 7 29.5c0 10 9.8 18.7 24.2 22.8l3.9-7C23.8 41.8 16.8 36.1 16.8 29.5c0-8.6 14.9-15.7 33.2-15.7s33.2 7.1 33.2 15.7c0 6.6-7 12.3-18.3 15.8l3.9 7C83.2 48.2 93 39.5 93 29.5 93 15.5 73.5 4 50 4zm0 17.5l-15.6 27.5h8.3l7.3-13.2 7.3 13.2h8.3L50 21.5zm0 11.8l3.9 6.8h-7.8l3.9-6.8z"/>
+            </svg>
+        `;
+    }
+
+    // Yamaha (NMAX, Aerox, Mio, Sniper, R15, MT, etc.)
+    if (p.includes('yamaha') || p.includes('nmax') || p.includes('aerox') || p.includes('mio') || p.includes('sniper') || p.includes('tracer')) {
+        return `
+            <svg class="${cssClass} text-red-600" viewBox="0 0 100 100" fill="currentColor" xmlns="http://www.w3.org/2000/svg" title="Yamaha">
+                <circle cx="50" cy="50" r="44" stroke="currentColor" stroke-width="8" fill="none"/>
+                <path d="M50 6v88M6 50h88M19 19l62 62M81 19L19 81" stroke="currentColor" stroke-width="6"/>
+            </svg>
+        `;
+    }
+
+    // Toyota (Vios, Fortuner, Innova, Hilux, Corolla, Raize, Wigo, etc.)
+    if (p.includes('toyota') || p.includes('vios') || p.includes('fortuner') || p.includes('innova') || p.includes('hilux') || p.includes('raize') || p.includes('wigo') || p.includes('rush')) {
+        return `
+            <svg class="${cssClass} text-red-600" viewBox="0 0 100 70" fill="none" stroke="currentColor" stroke-width="6" xmlns="http://www.w3.org/2000/svg" title="Toyota">
+                <ellipse cx="50" cy="35" rx="46" ry="30"/>
+                <ellipse cx="50" cy="24" rx="26" ry="14"/>
+                <ellipse cx="50" cy="35" rx="14" ry="29"/>
+            </svg>
+        `;
+    }
+
+    // Default Motorcycle/Bike vs Car icon
+    if (p.includes('bike') || p.includes('scooter') || p.includes('motor') || p.includes('150') || p.includes('125') || p.includes('160')) {
+        return `
+            <svg class="${cssClass} text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="5" cy="16" r="3"></circle>
+                <circle cx="19" cy="16" r="3"></circle>
+                <path d="M12 16h2l2-4h3"></path>
+                <path d="m8 16 3-8h3l2 4"></path>
+                <path d="m14 8-1.5-3.5L10 5"></path>
+            </svg>
+        `;
+    }
+
+    return `
+        <svg class="${cssClass} text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9C1.4 11.2 1 12 1 13v3c0 .6.4 1 1 1h2"></path>
+            <circle cx="7" cy="17" r="2"></circle>
+            <circle cx="17" cy="17" r="2"></circle>
+        </svg>
+    `;
+};
 
 // ==================== VEHICLE SPECIFICATIONS & PRESETS ====================
 const defaultVehicleSpecs = {
@@ -243,6 +310,14 @@ const getVehicleAvgEconomy = (profileName) => {
 const updateVehicleSpecsAndRange = (avgEconomy, latestPrice) => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const specs = getVehicleSpecs(currentProfileName);
+
+    // Update Brand Logos
+    if (navbarVehicleLogo) {
+        navbarVehicleLogo.innerHTML = getVehicleLogo(currentProfileName, 'h-4 w-4');
+    }
+    if (vehicleLogoBadge) {
+        vehicleLogoBadge.innerHTML = getVehicleLogo(currentProfileName, 'h-7 w-7 sm:h-8 sm:w-8');
+    }
 
     if (specVehicleName) specVehicleName.textContent = currentProfileName;
     if (specFuelBadge) specFuelBadge.innerHTML = `<i data-lucide="check-circle-2" class="h-3 w-3 mr-1 inline"></i> ${specs.fuelGrade}`;
@@ -393,6 +468,10 @@ const renderProfiles = () => {
         if (p === activeProfile) opt.selected = true;
         profileSelect.appendChild(opt);
     });
+
+    if (navbarVehicleLogo) {
+        navbarVehicleLogo.innerHTML = getVehicleLogo(activeProfile, 'h-4 w-4');
+    }
 };
 
 // Auto-sync profile list from database records
@@ -693,6 +772,9 @@ if (profileSelect) {
     profileSelect.addEventListener('change', (e) => {
         activeProfile = e.target.value;
         localStorage.setItem('activeProfile', activeProfile);
+        if (navbarVehicleLogo) {
+            navbarVehicleLogo.innerHTML = getVehicleLogo(activeProfile, 'h-4 w-4');
+        }
         renderTable();
         renderMaintenanceTable();
         renderServiceReminders();
@@ -703,7 +785,7 @@ if (profileSelect) {
 
 if (addProfileBtn) {
     addProfileBtn.addEventListener('click', () => {
-        const newProfile = prompt('Enter new vehicle name (e.g. Chery Tiggo 8 Pro, Civic, NMAX):');
+        const newProfile = prompt('Enter new vehicle name (e.g. Chery Tiggo 8 Pro, Honda Click, Yamaha NMAX, Toyota Vios):');
         if (newProfile && newProfile.trim() !== '') {
             let trimmed = newProfile.trim();
             if (trimmed.toLowerCase() === 'cherry') trimmed = 'Chery';

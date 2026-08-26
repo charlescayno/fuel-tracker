@@ -74,10 +74,12 @@
                         <span>Install App</span>
                     </button>
 
-                    <!-- Profile Selector -->
-                    <div class="flex items-center bg-gray-50 rounded-md border border-gray-300 px-2 py-1">
-                        <i data-lucide="car" class="h-4 w-4 text-gray-500 mr-1.5"></i>
-                        <select id="profile-select" class="bg-transparent border-none text-gray-900 text-sm font-medium focus:ring-0 focus:outline-none cursor-pointer pr-1">
+                    <!-- Profile Selector with Vehicle Logo -->
+                    <div class="flex items-center bg-gray-50 rounded-md border border-gray-300 px-2.5 py-1">
+                        <div id="navbar-vehicle-logo" class="h-4 w-4 mr-1.5 flex items-center justify-center text-gray-700">
+                            <!-- SVG Injected by JS -->
+                        </div>
+                        <select id="profile-select" class="bg-transparent border-none text-gray-900 text-sm font-semibold focus:ring-0 focus:outline-none cursor-pointer pr-1">
                             <!-- Populated by JS -->
                         </select>
                     </div>
@@ -157,14 +159,14 @@
             </div>
         </div>
 
-        <!-- Vehicle Specifications & Tank Range Estimator Bar -->
+        <!-- Vehicle Specifications & Tank Range Estimator Bar with Brand Logo -->
         <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 rounded-xl shadow-md text-white p-4 sm:p-5 mb-6 border border-blue-900/40">
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 
                 <!-- Vehicle Info & Fuel Recommendation -->
                 <div class="flex items-center space-x-3.5">
-                    <div class="p-3 bg-blue-500/10 rounded-xl text-blue-400 border border-blue-400/20 shrink-0">
-                        <i data-lucide="gauge" class="h-6 w-6"></i>
+                    <div id="vehicle-logo-badge" class="h-12 w-12 sm:h-14 sm:w-14 p-2.5 bg-white/10 rounded-xl text-white border border-white/20 shrink-0 flex items-center justify-center shadow-inner">
+                        <!-- Vehicle Logo SVG injected by JS -->
                     </div>
                     <div>
                         <div class="flex items-center space-x-2 flex-wrap gap-y-1">
@@ -507,7 +509,7 @@
 
     </main>
 
-    <script type="module" src="app.js?v=3.4"></script>
+    <script type="module" src="app.js?v=3.5"></script>
     <script>
         // Initialize Lucide icons on initial load
         lucide.createIcons();

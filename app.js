@@ -51,6 +51,20 @@ let editingId = null;
 let editingMaintId = null;
 let chartInstance = null;
 
+// Leaflet Map Global State
+let leafletMap = null;
+let currentTileLayer = null;
+let currentMapMode = 'radius'; // 'radius' or 'route'
+let radiusOrigin = [14.5995, 120.9842]; // Default Manila coordinates
+let radiusCircle = null;
+let radiusMarker = null;
+
+let routePinA = null;
+let routePinB = null;
+let markerPinA = null;
+let markerPinB = null;
+let routeGeoJsonLayer = null;
+
 // Profiles
 let loadedProfiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
 let profiles = [...new Set(loadedProfiles.map(p => p === 'Cherry' ? 'Chery' : p))];
@@ -116,8 +130,10 @@ const statTotalDist = document.getElementById('stat-total-dist');
 // Tabs & Views
 const tabFuel = document.getElementById('tab-fuel');
 const tabMaintenance = document.getElementById('tab-maintenance');
+const tabMap = document.getElementById('tab-map');
 const viewFuel = document.getElementById('view-fuel');
 const viewMaintenance = document.getElementById('view-maintenance');
+const viewMap = document.getElementById('view-map');
 
 // Maintenance Elements
 const maintFormTitle = document.getElementById('maint-form-title');
@@ -137,6 +153,31 @@ const serviceRemindersGrid = document.getElementById('service-reminders-grid');
 const reminderCurrentOdo = document.getElementById('reminder-current-odo');
 const addCustomServiceBtn = document.getElementById('add-custom-service-btn');
 
+// Map Control Elements
+const modeBtnRadius = document.getElementById('mode-btn-radius');
+const modeBtnRoute = document.getElementById('mode-btn-route');
+const panelRadius = document.getElementById('panel-radius');
+const panelRoute = document.getElementById('panel-route');
+const mapLocateBtn = document.getElementById('map-locate-btn');
+const radiusSlider = document.getElementById('radius-slider');
+const radiusValLabel = document.getElementById('radius-val-label');
+const radiusTargetVehicle = document.getElementById('radius-target-vehicle');
+const radiusAvgEcon = document.getElementById('radius-avg-econ');
+const radiusFuelNeeded = document.getElementById('radius-fuel-needed');
+const radiusRefuelCost = document.getElementById('radius-refuel-cost');
+const mapStatusHint = document.getElementById('map-status-hint');
+
+// Route Calculator Elements
+const presetRouteSelect = document.getElementById('preset-route-select');
+const resetRouteBtn = document.getElementById('reset-route-btn');
+const routeRoundTripCheck = document.getElementById('route-roundtrip-check');
+const routeDistanceVal = document.getElementById('route-distance-val');
+const routeTimeVal = document.getElementById('route-time-val');
+const routeFuelVal = document.getElementById('route-fuel-val');
+const routeTankPctVal = document.getElementById('route-tank-pct-val');
+const routeCostVal = document.getElementById('route-cost-val');
+const routeRefuelWarning = document.getElementById('route-refuel-warning');
+
 // ==================== FORMATTERS & HELPERS ====================
 const formatCurrency = (amount) => {
     if (amount === null || amount === undefined || isNaN(amount)) return '₱0.00';
@@ -152,7 +193,7 @@ const formatNumber = (num, decimals = 2) => {
 const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
     const p = (profileName || '').toLowerCase();
     
-    // Honda (ADV 150, PCX, Click, Civic, CRV, City, etc.)
+    // Honda
     if (p.includes('honda') || p.includes('adv') || p.includes('pcx') || p.includes('click') || p.includes('beat') || p.includes('wave') || p.includes('civic') || p.includes('city') || p.includes('crv')) {
         return `
             <svg class="${cssClass} text-red-500 hover:text-red-400 transition-colors" viewBox="0 0 100 82" fill="currentColor" xmlns="http://www.w3.org/2000/svg" title="Honda">
@@ -161,7 +202,7 @@ const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
         `;
     }
 
-    // Chery (Chery Tiggo 8, Tiggo 8 Pro, Tiggo 7, Arrizo, Omoda, etc.)
+    // Chery
     if (p.includes('chery') || p.includes('cherry') || p.includes('tiggo') || p.includes('arrizo') || p.includes('omoda') || p.includes('jaecoo')) {
         return `
             <svg class="${cssClass} text-red-500 hover:text-red-400 transition-colors" viewBox="0 0 100 68" fill="currentColor" xmlns="http://www.w3.org/2000/svg" title="Chery">
@@ -324,6 +365,16 @@ const getVehicleAvgEconomy = (profileName) => {
     return p.toLowerCase().includes('adv') ? 45.0 : 10.5;
 };
 
+const getLatestFuelPrice = (profileName) => {
+    const p = (profileName === 'Cherry') ? 'Chery' : profileName;
+    const profileRecords = records.filter(r => r.profile === p || (p === 'Chery' && r.profile === 'Cherry'));
+    if (profileRecords.length > 0) {
+        const sorted = [...profileRecords].sort((a, b) => new Date(a.date) - new Date(b.date));
+        return sorted[sorted.length - 1].pricePerLiter || 58.0;
+    }
+    return 58.0;
+};
+
 const updateVehicleSpecsAndRange = (avgEconomy, latestPrice, fuelCostPerKm = 0) => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const specs = getVehicleSpecs(currentProfileName);
@@ -341,10 +392,11 @@ const updateVehicleSpecsAndRange = (avgEconomy, latestPrice, fuelCostPerKm = 0) 
     if (specFuelDesc) specFuelDesc.textContent = specs.fuelDesc;
     if (specTankSize) specTankSize.textContent = `${formatNumber(specs.tankCapacity, 1)} L`;
 
+    const fullRange = avgEconomy > 0 ? (specs.tankCapacity * avgEconomy) : 0;
+
     if (specFullRange) {
-        if (avgEconomy > 0) {
-            const range = specs.tankCapacity * avgEconomy;
-            specFullRange.textContent = `~${formatNumber(range, 0)} km`;
+        if (fullRange > 0) {
+            specFullRange.textContent = `~${formatNumber(fullRange, 0)} km`;
         } else {
             specFullRange.textContent = '-- km';
         }
@@ -370,6 +422,7 @@ const updateVehicleSpecsAndRange = (avgEconomy, latestPrice, fuelCostPerKm = 0) 
     }
 
     updateLitersPercentHint();
+    updateMapPanelDefaults();
     if (window.lucide) lucide.createIcons();
 };
 
@@ -680,7 +733,7 @@ const updateStats = (processedData) => {
     statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
     statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
 
-    // Update Specs Banner
+    // Update Specs Banner & Map Defaults
     const latestPrice = latestRecord.pricePerLiter || 0;
     updateVehicleSpecsAndRange(avgEconomy, latestPrice, fuelCostPerKm);
 };
@@ -1022,6 +1075,449 @@ const renderServiceReminders = () => {
     if (window.lucide) lucide.createIcons();
 };
 
+// ==================== LEAFLET MAP ENGINE ====================
+const initMap = () => {
+    if (leafletMap) return;
+    const mapEl = document.getElementById('map');
+    if (!mapEl || !window.L) return;
+
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    
+    // Create Leaflet Map centered in Manila
+    leafletMap = L.map('map', {
+        zoomControl: true,
+        attributionControl: true
+    }).setView(radiusOrigin, 9);
+
+    // Apply CartoDB Tiles (Dark / Light)
+    updateMapTileLayer(isDarkMode);
+
+    // Map Click Handler for moving origin or setting route pins
+    leafletMap.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        
+        if (currentMapMode === 'radius') {
+            radiusOrigin = [lat, lng];
+            renderRadiusCircle();
+        } else if (currentMapMode === 'route') {
+            handleRouteMapClick(lat, lng);
+        }
+    });
+
+    // Render initial radius
+    renderRadiusCircle();
+};
+
+const updateMapTileLayer = (isDark) => {
+    if (!leafletMap || !window.L) return;
+    
+    if (currentTileLayer) {
+        leafletMap.removeLayer(currentTileLayer);
+    }
+
+    const tileUrl = isDark 
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+    currentTileLayer = L.tileLayer(tileUrl, {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19,
+        subdomains: 'abcd'
+    }).addTo(leafletMap);
+};
+
+// ==================== MAP: DYNAMIC RANGE RADIUS ====================
+const updateMapPanelDefaults = () => {
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const specs = getVehicleSpecs(currentProfileName);
+    const avgEconomy = getVehicleAvgEconomy(currentProfileName);
+    const fullRange = avgEconomy > 0 ? (specs.tankCapacity * avgEconomy) : 360;
+
+    if (radiusTargetVehicle) radiusTargetVehicle.textContent = currentProfileName;
+    if (radiusAvgEcon) radiusAvgEcon.textContent = `${formatNumber(avgEconomy, 1)} km/L`;
+    
+    if (radiusSlider) {
+        radiusSlider.max = Math.max(600, Math.round(fullRange * 1.3));
+        // If slider value exceeds new max or at default, adjust
+        if (parseFloat(radiusSlider.value) > parseFloat(radiusSlider.max)) {
+            radiusSlider.value = fullRange;
+        }
+    }
+
+    renderRadiusCircle();
+};
+
+const renderRadiusCircle = () => {
+    if (!leafletMap || !window.L) return;
+    
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const specs = getVehicleSpecs(currentProfileName);
+    const avgEconomy = getVehicleAvgEconomy(currentProfileName);
+    const latestPrice = getLatestFuelPrice(currentProfileName);
+
+    const rangeKm = radiusSlider ? parseFloat(radiusSlider.value) : (specs.tankCapacity * avgEconomy);
+    const radiusMeters = rangeKm * 1000;
+
+    // Remove existing circle and marker
+    if (radiusCircle) leafletMap.removeLayer(radiusCircle);
+    if (radiusMarker) leafletMap.removeLayer(radiusMarker);
+
+    // Only draw circle if in radius mode
+    if (currentMapMode === 'radius') {
+        radiusCircle = L.circle(radiusOrigin, {
+            radius: radiusMeters,
+            color: '#3b82f6',
+            fillColor: '#3b82f6',
+            fillOpacity: 0.16,
+            weight: 2
+        }).addTo(leafletMap);
+
+        const customPinHtml = `
+            <div class="relative flex items-center justify-center">
+                <span class="animate-ping absolute inline-flex h-7 w-7 rounded-full bg-blue-400 opacity-75"></span>
+                <div class="relative inline-flex rounded-full h-8 w-8 bg-blue-600 text-white items-center justify-center border-2 border-white shadow-lg text-xs font-bold">
+                    📍
+                </div>
+            </div>
+        `;
+        
+        const pinIcon = L.divIcon({
+            html: customPinHtml,
+            className: 'custom-map-pin',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+
+        radiusMarker = L.marker(radiusOrigin, { icon: pinIcon, draggable: true }).addTo(leafletMap);
+        
+        radiusMarker.on('dragend', (e) => {
+            const pos = e.target.getLatLng();
+            radiusOrigin = [pos.lat, pos.lng];
+            renderRadiusCircle();
+        });
+
+        radiusMarker.bindPopup(`
+            <div class="p-1 text-xs">
+                <strong class="text-blue-600 font-bold block mb-0.5">${currentProfileName} Origin</strong>
+                <span>Driving reach radius: <strong>~${formatNumber(rangeKm, 0)} km</strong></span>
+            </div>
+        `);
+    }
+
+    // Update UI Stats
+    if (radiusValLabel) radiusValLabel.textContent = `~${formatNumber(rangeKm, 0)} km`;
+    
+    const fuelNeeded = avgEconomy > 0 ? (rangeKm / avgEconomy) : 0;
+    if (radiusFuelNeeded) radiusFuelNeeded.textContent = `${formatNumber(fuelNeeded, 1)} L (${formatNumber((fuelNeeded / specs.tankCapacity) * 100, 0)}% Tank)`;
+    
+    const refuelCost = fuelNeeded * latestPrice;
+    if (radiusRefuelCost) radiusRefuelCost.textContent = formatCurrency(refuelCost);
+};
+
+// Range slider input
+if (radiusSlider) {
+    radiusSlider.addEventListener('input', () => {
+        document.querySelectorAll('.radius-preset-btn').forEach(b => b.classList.remove('active-preset', 'border-blue-600', 'bg-blue-50', 'text-blue-700', 'dark:bg-blue-950/70', 'dark:text-blue-300'));
+        renderRadiusCircle();
+    });
+}
+
+// Range Preset Buttons
+document.querySelectorAll('.radius-preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.radius-preset-btn').forEach(b => {
+            b.classList.remove('active-preset', 'border-blue-600', 'bg-blue-50', 'text-blue-700', 'dark:bg-blue-950/70', 'dark:text-blue-300');
+            b.classList.add('border-gray-200', 'text-gray-700', 'dark:border-slate-700', 'dark:text-slate-300');
+        });
+        btn.classList.add('active-preset', 'border-blue-600', 'bg-blue-50', 'text-blue-700', 'dark:bg-blue-950/70', 'dark:text-blue-300');
+        btn.classList.remove('border-gray-200', 'text-gray-700', 'dark:border-slate-700', 'dark:text-slate-300');
+
+        const fraction = parseFloat(btn.dataset.fraction) || 1.0;
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const specs = getVehicleSpecs(currentProfileName);
+        const avgEconomy = getVehicleAvgEconomy(currentProfileName);
+        const fullRange = avgEconomy > 0 ? (specs.tankCapacity * avgEconomy) : 360;
+
+        const targetRange = Math.round(fullRange * fraction);
+        if (radiusSlider) {
+            radiusSlider.value = targetRange;
+        }
+        renderRadiusCircle();
+        if (leafletMap && radiusCircle) {
+            leafletMap.fitBounds(radiusCircle.getBounds(), { padding: [30, 30] });
+        }
+    });
+});
+
+// Locate Me button
+if (mapLocateBtn) {
+    mapLocateBtn.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by your browser.');
+            return;
+        }
+        mapLocateBtn.innerHTML = '<i data-lucide="loader-2" class="h-3.5 w-3.5 mr-1 animate-spin"></i> Locating...';
+        if (window.lucide) lucide.createIcons();
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                radiusOrigin = [pos.coords.latitude, pos.coords.longitude];
+                if (leafletMap) {
+                    leafletMap.setView(radiusOrigin, 10);
+                }
+                renderRadiusCircle();
+                mapLocateBtn.innerHTML = '<i data-lucide="crosshair" class="h-3.5 w-3.5 mr-1"></i> My Location';
+                if (window.lucide) lucide.createIcons();
+            },
+            (err) => {
+                console.warn('Geolocation error:', err);
+                alert('Could not retrieve your location. Setting to Manila.');
+                mapLocateBtn.innerHTML = '<i data-lucide="crosshair" class="h-3.5 w-3.5 mr-1"></i> My Location';
+                if (window.lucide) lucide.createIcons();
+            },
+            { enableHighAccuracy: true, timeout: 8000 }
+        );
+    });
+}
+
+// ==================== MAP: TRIP ROUTE & COST CALCULATOR ====================
+const popularRoutes = {
+    'tagaytay': { start: [14.5995, 120.9842], end: [14.1153, 120.9621], name: 'Manila ➔ Tagaytay' },
+    'baguio': { start: [14.5995, 120.9842], end: [16.4023, 120.5960], name: 'Manila ➔ Baguio' },
+    'launion': { start: [14.5995, 120.9842], end: [16.6710, 120.3340], name: 'Manila ➔ San Juan, La Union' },
+    'subic': { start: [14.5995, 120.9842], end: [14.8236, 120.2796], name: 'Manila ➔ Subic Bay' },
+    'batangas': { start: [14.5995, 120.9842], end: [13.7565, 121.0450], name: 'Manila ➔ Batangas Port' },
+    'baler': { start: [14.5995, 120.9842], end: [15.7594, 121.5624], name: 'Manila ➔ Baler' },
+    'lucban': { start: [14.5995, 120.9842], end: [14.1141, 121.5544], name: 'Manila ➔ Lucban, Quezon' },
+    'naga': { start: [14.5995, 120.9842], end: [13.6218, 123.1948], name: 'Manila ➔ Naga City' }
+};
+
+const handleRouteMapClick = (lat, lng) => {
+    if (!routePinA) {
+        routePinA = [lat, lng];
+        renderRouteMarkers();
+    } else if (!routePinB) {
+        routePinB = [lat, lng];
+        renderRouteMarkers();
+        calculateAndDrawRoute();
+    } else {
+        // Reset and start new Pin A
+        routePinA = [lat, lng];
+        routePinB = null;
+        if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
+        renderRouteMarkers();
+    }
+};
+
+const renderRouteMarkers = () => {
+    if (!leafletMap || !window.L) return;
+
+    if (markerPinA) leafletMap.removeLayer(markerPinA);
+    if (markerPinB) leafletMap.removeLayer(markerPinB);
+
+    if (routePinA) {
+        const pinAHtml = `
+            <div class="relative inline-flex rounded-full h-8 w-8 bg-blue-600 text-white items-center justify-center border-2 border-white shadow-lg text-xs font-bold">
+                A
+            </div>
+        `;
+        markerPinA = L.marker(routePinA, {
+            icon: L.divIcon({ html: pinAHtml, className: 'custom-pin-a', iconSize: [32, 32], iconAnchor: [16, 16] })
+        }).addTo(leafletMap).bindPopup('<b>Starting Point A</b>');
+    }
+
+    if (routePinB) {
+        const pinBHtml = `
+            <div class="relative inline-flex rounded-full h-8 w-8 bg-orange-600 text-white items-center justify-center border-2 border-white shadow-lg text-xs font-bold">
+                B
+            </div>
+        `;
+        markerPinB = L.marker(routePinB, {
+            icon: L.divIcon({ html: pinBHtml, className: 'custom-pin-b', iconSize: [32, 32], iconAnchor: [16, 16] })
+        }).addTo(leafletMap).bindPopup('<b>Destination Point B</b>');
+    }
+};
+
+const calculateAndDrawRoute = async () => {
+    if (!routePinA || !routePinB) return;
+
+    if (routeDistanceVal) routeDistanceVal.textContent = 'Calculating...';
+    if (routeCostVal) routeCostVal.textContent = '₱--';
+
+    const lon1 = routePinA[1];
+    const lat1 = routePinA[0];
+    const lon2 = routePinB[1];
+    const lat2 = routePinB[0];
+
+    try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+            const route = data.routes[0];
+            const distanceKm = route.distance / 1000;
+            const durationSec = route.duration;
+            
+            // Draw Polyline
+            if (routeGeoJsonLayer && leafletMap) {
+                leafletMap.removeLayer(routeGeoJsonLayer);
+            }
+
+            routeGeoJsonLayer = L.geoJSON(route.geometry, {
+                style: {
+                    color: '#2563eb',
+                    weight: 5,
+                    opacity: 0.85
+                }
+            }).addTo(leafletMap);
+
+            leafletMap.fitBounds(routeGeoJsonLayer.getBounds(), { padding: [40, 40] });
+
+            updateRouteResults(distanceKm, durationSec);
+        } else {
+            // Fallback straight line
+            fallbackStraightLineRoute(lat1, lon1, lat2, lon2);
+        }
+    } catch (e) {
+        console.warn('OSRM routing fetch failed, calculating straight line:', e);
+        fallbackStraightLineRoute(lat1, lon1, lat2, lon2);
+    }
+};
+
+const fallbackStraightLineRoute = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const straightKm = (R * c) * 1.35; // Multiply by road circuity factor
+    const durationSec = (straightKm / 45) * 3600;
+
+    if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
+    
+    routeGeoJsonLayer = L.polyline([[lat1, lon1], [lat2, lon2]], {
+        color: '#2563eb',
+        weight: 4,
+        dashArray: '6, 8'
+    }).addTo(leafletMap);
+
+    leafletMap.fitBounds(routeGeoJsonLayer.getBounds(), { padding: [40, 40] });
+    updateRouteResults(straightKm, durationSec);
+};
+
+const updateRouteResults = (distanceKm, durationSec) => {
+    const isRoundTrip = routeRoundTripCheck ? routeRoundTripCheck.checked : false;
+    const totalKm = isRoundTrip ? distanceKm * 2 : distanceKm;
+    const totalSec = isRoundTrip ? durationSec * 2 : durationSec;
+
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const specs = getVehicleSpecs(currentProfileName);
+    const avgEconomy = getVehicleAvgEconomy(currentProfileName);
+    const latestPrice = getLatestFuelPrice(currentProfileName);
+    const fullRange = avgEconomy > 0 ? (specs.tankCapacity * avgEconomy) : 360;
+
+    const fuelConsumed = avgEconomy > 0 ? (totalKm / avgEconomy) : 0;
+    const tripCost = fuelConsumed * latestPrice;
+    const tankPctUsed = specs.tankCapacity > 0 ? ((fuelConsumed / specs.tankCapacity) * 100) : 0;
+
+    // Format Duration
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.round((totalSec % 3600) / 60);
+    const timeStr = hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`;
+
+    if (routeDistanceVal) routeDistanceVal.textContent = `${formatNumber(totalKm, 1)} km ${isRoundTrip ? '(Round Trip)' : ''}`;
+    if (routeTimeVal) routeTimeVal.textContent = `~${timeStr}`;
+    if (routeFuelVal) routeFuelVal.textContent = `${formatNumber(fuelConsumed, 2)} Liters`;
+    if (routeTankPctVal) routeTankPctVal.textContent = `${formatNumber(tankPctUsed, 1)}% of ${specs.tankCapacity}L Tank`;
+    if (routeCostVal) routeCostVal.textContent = formatCurrency(tripCost);
+
+    // Refuel warning
+    if (routeRefuelWarning) {
+        if (fuelConsumed > specs.tankCapacity || totalKm > fullRange) {
+            routeRefuelWarning.classList.remove('hidden');
+        } else {
+            routeRefuelWarning.classList.add('hidden');
+        }
+    }
+};
+
+if (presetRouteSelect) {
+    presetRouteSelect.addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (!val || !popularRoutes[val]) return;
+
+        const p = popularRoutes[val];
+        routePinA = p.start;
+        routePinB = p.end;
+        renderRouteMarkers();
+        calculateAndDrawRoute();
+    });
+}
+
+if (routeRoundTripCheck) {
+    routeRoundTripCheck.addEventListener('change', () => {
+        if (routePinA && routePinB) {
+            calculateAndDrawRoute();
+        }
+    });
+}
+
+if (resetRouteBtn) {
+    resetRouteBtn.addEventListener('click', () => {
+        routePinA = null;
+        routePinB = null;
+        if (markerPinA && leafletMap) leafletMap.removeLayer(markerPinA);
+        if (markerPinB && leafletMap) leafletMap.removeLayer(markerPinB);
+        if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
+        if (presetRouteSelect) presetRouteSelect.value = '';
+        if (routeDistanceVal) routeDistanceVal.textContent = '-- km';
+        if (routeTimeVal) routeTimeVal.textContent = '--';
+        if (routeFuelVal) routeFuelVal.textContent = '-- L';
+        if (routeTankPctVal) routeTankPctVal.textContent = '--%';
+        if (routeCostVal) routeCostVal.textContent = '₱0.00';
+        if (routeRefuelWarning) routeRefuelWarning.classList.add('hidden');
+    });
+}
+
+// Mode Switcher (Radius vs Route)
+if (modeBtnRadius && modeBtnRoute && panelRadius && panelRoute) {
+    modeBtnRadius.addEventListener('click', () => {
+        currentMapMode = 'radius';
+        modeBtnRadius.className = 'flex-1 py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center justify-center bg-blue-600 text-white shadow-xs';
+        modeBtnRoute.className = 'flex-1 py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center justify-center text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white';
+        
+        panelRadius.classList.remove('hidden');
+        panelRoute.classList.add('hidden');
+        
+        if (mapStatusHint) mapStatusHint.textContent = 'Range Radius: Active';
+
+        // Clear route layers and show radius
+        if (markerPinA && leafletMap) leafletMap.removeLayer(markerPinA);
+        if (markerPinB && leafletMap) leafletMap.removeLayer(markerPinB);
+        if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
+        renderRadiusCircle();
+    });
+
+    modeBtnRoute.addEventListener('click', () => {
+        currentMapMode = 'route';
+        modeBtnRoute.className = 'flex-1 py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center justify-center bg-blue-600 text-white shadow-xs';
+        modeBtnRadius.className = 'flex-1 py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center justify-center text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white';
+        
+        panelRoute.classList.remove('hidden');
+        panelRadius.classList.add('hidden');
+        
+        if (mapStatusHint) mapStatusHint.textContent = 'Trip Planner: Click map for Pin A & B';
+
+        // Hide radius circle & marker
+        if (radiusCircle && leafletMap) leafletMap.removeLayer(radiusCircle);
+        if (radiusMarker && leafletMap) leafletMap.removeLayer(radiusMarker);
+        renderRouteMarkers();
+    });
+}
+
 // ==================== THEME MANAGEMENT ====================
 const applyTheme = (theme) => {
     const isDark = theme === 'dark';
@@ -1041,15 +1537,17 @@ const applyTheme = (theme) => {
     localStorage.setItem('theme', theme);
     if (window.lucide) lucide.createIcons();
     
-    // Refresh chart with updated theme colors if records exist
+    // Refresh chart with updated theme colors
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
     if (profileRecords.length > 0) {
         updateChart(processRecords(profileRecords));
     }
+
+    // Update map tile layers
+    updateMapTileLayer(isDark);
 };
 
-// ==================== EVENT LISTENERS ====================
 if (themeToggleBtn) {
     themeToggleBtn.addEventListener('click', () => {
         const isCurrentlyDark = document.documentElement.classList.contains('dark');
@@ -1057,88 +1555,45 @@ if (themeToggleBtn) {
     });
 }
 
-// PWA Install Prompt
-let deferredInstallPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    if (installPwaBtn) {
-        installPwaBtn.classList.remove('hidden');
-        installPwaBtn.classList.add('flex');
-    }
-});
+// ==================== NAVIGATION TABS ====================
+const setTabActive = (activeTab, inactiveTabs, activeView, inactiveViews) => {
+    activeTab.classList.replace('border-transparent', 'border-blue-600');
+    activeTab.classList.replace('text-gray-500', 'text-blue-600');
+    activeTab.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
+    activeTab.classList.add('font-semibold');
 
-if (installPwaBtn) {
-    installPwaBtn.addEventListener('click', async () => {
-        if (!deferredInstallPrompt) return;
-        deferredInstallPrompt.prompt();
-        const choiceResult = await deferredInstallPrompt.userChoice;
-        if (choiceResult.outcome === 'accepted') {
-            console.log('[PWA] Installed');
-        }
-        deferredInstallPrompt = null;
-        installPwaBtn.classList.add('hidden');
-        installPwaBtn.classList.remove('flex');
+    inactiveTabs.forEach(tab => {
+        tab.classList.replace('border-blue-600', 'border-transparent');
+        tab.classList.replace('text-blue-600', 'text-gray-500');
+        tab.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
+        tab.classList.remove('font-semibold');
     });
-}
 
-// Online / Offline Status
-const updateOnlineStatus = () => {
-    const isOnline = navigator.onLine;
-    if (networkStatus) {
-        if (isOnline) {
-            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> Online';
-            networkStatus.className = 'flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5';
-        } else {
-            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span> Offline (Cached)';
-            networkStatus.className = 'flex items-center text-[10px] font-medium text-amber-600 dark:text-amber-400 mt-0.5';
-        }
-    }
-    if (offlineBanner) {
-        if (isOnline) {
-            offlineBanner.classList.add('hidden');
-        } else {
-            offlineBanner.classList.remove('hidden');
-        }
-    }
-    if (window.lucide) lucide.createIcons();
+    activeView.classList.remove('hidden');
+    inactiveViews.forEach(v => v.classList.add('hidden'));
 };
 
-window.addEventListener('online', updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
-updateOnlineStatus();
-
-// Tabs
-if (tabFuel && tabMaintenance && viewFuel && viewMaintenance) {
+if (tabFuel && tabMaintenance && tabMap && viewFuel && viewMaintenance && viewMap) {
     tabFuel.addEventListener('click', () => {
-        tabFuel.classList.replace('border-transparent', 'border-blue-600');
-        tabFuel.classList.replace('text-gray-500', 'text-blue-600');
-        tabFuel.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
-        tabFuel.classList.add('font-semibold');
-        
-        tabMaintenance.classList.replace('border-blue-600', 'border-transparent');
-        tabMaintenance.classList.replace('text-blue-600', 'text-gray-500');
-        tabMaintenance.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
-        tabMaintenance.classList.remove('font-semibold');
-        
-        viewFuel.classList.remove('hidden');
-        viewMaintenance.classList.add('hidden');
+        setTabActive(tabFuel, [tabMaintenance, tabMap], viewFuel, [viewMaintenance, viewMap]);
     });
 
     tabMaintenance.addEventListener('click', () => {
-        tabMaintenance.classList.replace('border-transparent', 'border-blue-600');
-        tabMaintenance.classList.replace('text-gray-500', 'text-blue-600');
-        tabMaintenance.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
-        tabMaintenance.classList.add('font-semibold');
-        
-        tabFuel.classList.replace('border-blue-600', 'border-transparent');
-        tabFuel.classList.replace('text-blue-600', 'text-gray-500');
-        tabFuel.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
-        tabFuel.classList.remove('font-semibold');
-        
-        viewMaintenance.classList.remove('hidden');
-        viewFuel.classList.add('hidden');
+        setTabActive(tabMaintenance, [tabFuel, tabMap], viewMaintenance, [viewFuel, viewMap]);
         renderServiceReminders();
+    });
+
+    tabMap.addEventListener('click', () => {
+        setTabActive(tabMap, [tabFuel, tabMaintenance], viewMap, [viewFuel, viewMaintenance]);
+        initMap();
+        setTimeout(() => {
+            if (leafletMap) {
+                leafletMap.invalidateSize();
+                if (currentMapMode === 'radius' && radiusCircle) {
+                    leafletMap.fitBounds(radiusCircle.getBounds(), { padding: [30, 30] });
+                }
+            }
+        }, 200);
     });
 }
 
@@ -1155,6 +1610,7 @@ if (profileSelect) {
         renderServiceReminders();
         updateOdometerHints();
         calculateFormTotal();
+        updateMapPanelDefaults();
     });
 }
 
@@ -1177,6 +1633,7 @@ if (addProfileBtn) {
             renderServiceReminders();
             updateOdometerHints();
             calculateFormTotal();
+            updateMapPanelDefaults();
         }
     });
 }
@@ -1406,6 +1863,7 @@ onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     syncProfilesFromRecords();
     renderTable();
     renderServiceReminders();
+    updateMapPanelDefaults();
 });
 
 onSnapshot(collection(db, "maintRecords"), (snapshot) => {

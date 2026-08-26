@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fuel-tracker-v2';
+const CACHE_NAME = 'fuel-tracker-v3';
 const ASSETS_TO_CACHE = [
   './',
   'index.html',
@@ -11,6 +11,8 @@ const ASSETS_TO_CACHE = [
   'https://cdn.tailwindcss.com',
   'https://cdn.jsdelivr.net/npm/chart.js',
   'https://unpkg.com/lucide@latest',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
   'https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js'
 ];

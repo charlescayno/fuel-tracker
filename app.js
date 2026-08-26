@@ -116,6 +116,7 @@ const odometerInput = document.getElementById('odometer');
 const litersInput = document.getElementById('liters');
 const priceInput = document.getElementById('price');
 const calculatedTotal = document.getElementById('calculated-total');
+const calculatedRange = document.getElementById('calculated-range');
 const historyTableBody = document.getElementById('history-table-body');
 const emptyState = document.getElementById('empty-state');
 const clearDataBtn = document.getElementById('clear-data-btn');
@@ -213,7 +214,6 @@ const getVehicleSpecs = (profileName) => {
     if (defaultVehicleSpecs[p]) {
         return defaultVehicleSpecs[p];
     }
-    // Generic fallback for custom vehicles
     return {
         tankCapacity: 45.0,
         fuelGrade: '91/95 RON',
@@ -224,6 +224,20 @@ const getVehicleSpecs = (profileName) => {
 const saveVehicleSpecs = (profileName, specs) => {
     const p = (profileName === 'Cherry') ? 'Chery' : profileName;
     localStorage.setItem(`vehicle_spec_${p}`, JSON.stringify(specs));
+};
+
+const getVehicleAvgEconomy = (profileName) => {
+    const p = (profileName === 'Cherry') ? 'Chery' : profileName;
+    const profileRecords = records.filter(r => r.profile === p || (p === 'Chery' && r.profile === 'Cherry'));
+    const processed = processRecords(profileRecords);
+    let totalTripKm = 0;
+    let totalLiters = 0;
+    for (let i = 1; i < processed.length; i++) {
+        if (processed[i].tripKm) totalTripKm += processed[i].tripKm;
+        if (processed[i].liters) totalLiters += processed[i].liters;
+    }
+    if (totalLiters > 0) return totalTripKm / totalLiters;
+    return p.toLowerCase().includes('adv') ? 45.0 : 10.5;
 };
 
 const updateVehicleSpecsAndRange = (avgEconomy, latestPrice) => {
@@ -273,9 +287,28 @@ const updateLitersPercentHint = () => {
     }
 };
 
-if (litersInput) {
-    litersInput.addEventListener('input', updateLitersPercentHint);
-}
+const calculateFormTotal = () => {
+    const liters = parseFloat(litersInput.value) || 0;
+    const price = parseFloat(priceInput.value) || 0;
+    const total = liters * price;
+    if (calculatedTotal) calculatedTotal.textContent = formatCurrency(total);
+
+    // Live Range Added calculation
+    if (calculatedRange) {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const avgEconomy = getVehicleAvgEconomy(currentProfileName);
+        if (liters > 0 && avgEconomy > 0) {
+            const rangeAdded = liters * avgEconomy;
+            calculatedRange.textContent = `+${formatNumber(rangeAdded, 1)} km`;
+        } else {
+            calculatedRange.textContent = '+0 km';
+        }
+    }
+    updateLitersPercentHint();
+};
+
+if (litersInput) litersInput.addEventListener('input', calculateFormTotal);
+if (priceInput) priceInput.addEventListener('input', calculateFormTotal);
 
 if (editSpecsBtn) {
     editSpecsBtn.addEventListener('click', () => {
@@ -656,17 +689,6 @@ const renderServiceReminders = () => {
     if (window.lucide) lucide.createIcons();
 };
 
-const calculateFormTotal = () => {
-    if (!calculatedTotal) return;
-    const liters = parseFloat(litersInput.value) || 0;
-    const price = parseFloat(priceInput.value) || 0;
-    const total = liters * price;
-    calculatedTotal.textContent = formatCurrency(total);
-};
-
-if (litersInput) litersInput.addEventListener('input', calculateFormTotal);
-if (priceInput) priceInput.addEventListener('input', calculateFormTotal);
-
 if (profileSelect) {
     profileSelect.addEventListener('change', (e) => {
         activeProfile = e.target.value;
@@ -675,6 +697,7 @@ if (profileSelect) {
         renderMaintenanceTable();
         renderServiceReminders();
         updateOdometerHints();
+        calculateFormTotal();
     });
 }
 
@@ -695,6 +718,7 @@ if (addProfileBtn) {
             renderMaintenanceTable();
             renderServiceReminders();
             updateOdometerHints();
+            calculateFormTotal();
         }
     });
 }
@@ -705,6 +729,7 @@ if (cancelEditBtn) {
         form.reset();
         dateInput.valueAsDate = new Date();
         calculatedTotal.textContent = '₱0.00';
+        if (calculatedRange) calculatedRange.textContent = '+0 km';
         submitBtn.textContent = 'Save Record';
         cancelEditBtn.classList.add('hidden');
         updateLitersPercentHint();
@@ -721,7 +746,6 @@ window.editRecord = (id) => {
     litersInput.value = record.liters;
     priceInput.value = record.pricePerLiter;
     calculateFormTotal();
-    updateLitersPercentHint();
     
     submitBtn.textContent = 'Update Record';
     cancelEditBtn.classList.remove('hidden');
@@ -958,6 +982,7 @@ const renderTable = () => {
     const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
     const tableEl = document.querySelector('#view-fuel table');
     const specs = getVehicleSpecs(currentProfileName);
+    const avgEconomy = getVehicleAvgEconomy(currentProfileName);
     
     if (profileRecords.length === 0) {
         if (emptyState) emptyState.classList.remove('hidden');
@@ -984,15 +1009,21 @@ const renderTable = () => {
         const dateObj = new Date(row.date);
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
-        const pctTank = (row.liters > 0 && specs.tankCapacity > 0) ? `(${((row.liters / specs.tankCapacity) * 100).toFixed(0)}% tank)` : '';
+        const pctTank = (row.liters > 0 && specs.tankCapacity > 0) ? `${((row.liters / specs.tankCapacity) * 100).toFixed(0)}% tank` : '';
+        const economyToUse = row.kmPerLiter || avgEconomy;
+        const rangeAddedVal = (row.liters > 0 && economyToUse > 0) ? (row.liters * economyToUse) : null;
+        const rangeAddedStr = rangeAddedVal ? `+${formatNumber(rangeAddedVal, 0)} km` : '';
 
         tr.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${formattedDate}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 font-bold bg-yellow-50">${row.odometer}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500">${row.tripKm !== null ? row.tripKm : '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right bg-amber-50/50">
-                <div class="text-amber-700 font-semibold">${formatNumber(row.liters)} L</div>
-                <div class="text-[10px] text-gray-500 font-medium">${pctTank}</div>
+                <div class="text-amber-700 font-bold">${formatNumber(row.liters)} L</div>
+                <div class="text-[11px] flex items-center justify-end space-x-1 mt-0.5">
+                    ${pctTank ? `<span class="text-[10px] text-gray-400 font-medium">${pctTank}</span>` : ''}
+                    ${rangeAddedStr ? `<span class="inline-flex items-center text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">${rangeAddedStr}</span>` : ''}
+                </div>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-amber-700 font-medium bg-amber-50/50">${formatCurrency(row.pricePerLiter)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">${formatCurrency(row.amount)}</td>
@@ -1103,6 +1134,7 @@ if (form) {
             litersInput.value = '';
             priceInput.value = '';
             calculatedTotal.textContent = '₱0.00';
+            if (calculatedRange) calculatedRange.textContent = '+0 km';
             dateInput.valueAsDate = new Date();
             updateLitersPercentHint();
 

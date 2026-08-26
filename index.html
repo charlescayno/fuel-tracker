@@ -284,10 +284,17 @@
                                     </div>
                                 </div>
 
-                                <div class="bg-blue-50 rounded-lg p-4 mt-2">
+                                <!-- Calculation Summary Box (Total + Range Added) -->
+                                <div class="bg-blue-50 rounded-lg p-4 mt-2 space-y-2 border border-blue-100">
                                     <div class="flex justify-between items-center">
                                         <span class="text-sm text-blue-800 font-medium">Total Amount</span>
                                         <span class="text-xl font-bold text-blue-900" id="calculated-total">₱0.00</span>
+                                    </div>
+                                    <div class="flex justify-between items-center pt-2 border-t border-blue-200/60 text-xs">
+                                        <span class="text-blue-800 font-medium flex items-center">
+                                            <i data-lucide="zap" class="h-3.5 w-3.5 mr-1 text-emerald-600"></i> Est. Range Added
+                                        </span>
+                                        <span class="font-bold text-emerald-700 text-sm" id="calculated-range">+0 km</span>
                                     </div>
                                 </div>
 
@@ -324,7 +331,7 @@
                                         <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Date</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Odo (km)</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Trip (km)</th>
-                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-amber-50/60">Liters (% Tank)</th>
+                                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-amber-50/60">Liters (Range Added)</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-amber-50/60">Price/L</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Amount</th>
                                         <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap bg-blue-50">₱/km</th>
@@ -500,7 +507,7 @@
 
     </main>
 
-    <script type="module" src="app.js?v=3.3"></script>
+    <script type="module" src="app.js?v=3.4"></script>
     <script>
         // Initialize Lucide icons on initial load
         lucide.createIcons();

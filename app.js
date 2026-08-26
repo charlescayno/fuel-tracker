@@ -47,6 +47,7 @@ if ('serviceWorker' in navigator) {
 // ==================== GLOBAL STATE ====================
 let records = [];
 let maintRecords = [];
+let tripRecords = [];
 let editingId = null;
 let editingMaintId = null;
 let chartInstance = null;
@@ -64,6 +65,13 @@ let routePinB = null;
 let markerPinA = null;
 let markerPinB = null;
 let routeGeoJsonLayer = null;
+
+// Route & Travel Time Calculation State
+let currentRouteData = null;
+let stopwatchInterval = null;
+let tripStartTime = null;
+let recordedActualSec = 0;
+let isTripRunning = false;
 
 // Profiles
 let loadedProfiles = JSON.parse(localStorage.getItem('fuelProfiles')) || ['ADV 150'];
@@ -188,10 +196,29 @@ const resetRouteBtn = document.getElementById('reset-route-btn');
 const routeRoundTripCheck = document.getElementById('route-roundtrip-check');
 const routeDistanceVal = document.getElementById('route-distance-val');
 const routeTimeVal = document.getElementById('route-time-val');
+const routeTrafficTimeVal = document.getElementById('route-traffic-time-val');
+const routeEtaVal = document.getElementById('route-eta-val');
 const routeFuelVal = document.getElementById('route-fuel-val');
 const routeTankPctVal = document.getElementById('route-tank-pct-val');
 const routeCostVal = document.getElementById('route-cost-val');
 const routeRefuelWarning = document.getElementById('route-refuel-warning');
+
+// Live Trip Tracker & Actual Travel Time Elements
+const tripLiveStatusBadge = document.getElementById('trip-live-status-badge');
+const tripStopwatchDisplay = document.getElementById('trip-stopwatch-display');
+const tripStopwatchHint = document.getElementById('trip-stopwatch-hint');
+const startTripBtn = document.getElementById('start-trip-btn');
+const finishTripBtn = document.getElementById('finish-trip-btn');
+const actualTripSummary = document.getElementById('actual-trip-summary');
+const actualRecordedTimeVal = document.getElementById('actual-recorded-time-val');
+const actualTimeDiffVal = document.getElementById('actual-time-diff-val');
+const manualActualHrs = document.getElementById('manual-actual-hrs');
+const manualActualMins = document.getElementById('manual-actual-mins');
+const saveTripLogBtn = document.getElementById('save-trip-log-btn');
+
+// Trips History Table Elements
+const tripsTableBody = document.getElementById('trips-table-body');
+const tripsEmptyState = document.getElementById('trips-empty-state');
 
 // Floating Canvas Search
 const mapQuickSearchInput = document.getElementById('map-quick-search-input');
@@ -208,6 +235,30 @@ const formatCurrency = (amount) => {
 const formatNumber = (num, decimals = 2) => {
     if (num === null || num === undefined || isNaN(num)) return '-';
     return Number(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+};
+
+const formatDuration = (totalSec) => {
+    if (!totalSec || totalSec <= 0) return '0 min';
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.round((totalSec % 3600) / 60);
+    if (hrs > 0) {
+        return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+    }
+    return `${Math.max(1, mins)}m`;
+};
+
+const formatDurationFull = (totalSec) => {
+    if (!totalSec || totalSec <= 0) return '0 min';
+    const hrs = Math.floor(totalSec / 3600);
+    const mins = Math.round((totalSec % 3600) / 60);
+    if (hrs > 0) {
+        return mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+    }
+    return `${Math.max(1, mins)} min`;
+};
+
+const formatTimeOfDay = (date) => {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 };
 
 // ==================== VEHICLE LOGOS ====================
@@ -248,54 +299,115 @@ const getVehicleLogo = (profileName, cssClass = 'h-6 w-6') => {
             <svg class="${cssClass} text-red-600" viewBox="0 0 100 70" fill="none" stroke="currentColor" stroke-width="6" xmlns="http://www.w3.org/2000/svg" title="Toyota">
                 <ellipse cx="50" cy="35" rx="46" ry="30"/>
                 <ellipse cx="50" cy="24" rx="26" ry="14"/>
-                <ellipse cx="50" cy="35" rx="14" ry="29"/>
+                <ellipse cx="50" cy="40" rx="13" ry="24"/>
             </svg>
         `;
     }
 
-    // Default Motorcycle vs Car
-    if (p.includes('bike') || p.includes('scooter') || p.includes('motor') || p.includes('150') || p.includes('125') || p.includes('160')) {
+    // Mitsubishi
+    if (p.includes('mitsubishi') || p.includes('montero') || p.includes('xpander') || p.includes('mirage') || p.includes('strada') || p.includes('l300')) {
         return `
-            <svg class="${cssClass} text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="5" cy="16" r="3"></circle>
-                <circle cx="19" cy="16" r="3"></circle>
-                <path d="M12 16h2l2-4h3"></path>
-                <path d="m8 16 3-8h3l2 4"></path>
-                <path d="m14 8-1.5-3.5L10 5"></path>
+            <svg class="${cssClass} text-red-600" viewBox="0 0 100 87" fill="currentColor" xmlns="http://www.w3.org/2000/svg" title="Mitsubishi">
+                <polygon points="50,0 35,26 65,26"/>
+                <polygon points="35,26 20,52 50,52"/>
+                <polygon points="65,26 80,52 50,52"/>
+                <polygon points="20,52 5,78 35,78"/>
+                <polygon points="80,52 95,78 65,78"/>
+                <polygon points="50,52 35,78 65,78"/>
             </svg>
         `;
     }
 
-    return `
-        <svg class="${cssClass} text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9C1.4 11.2 1 12 1 13v3c0 .6.4 1 1 1h2"></path>
-            <circle cx="7" cy="17" r="2"></circle>
-            <circle cx="17" cy="17" r="2"></circle>
-        </svg>
-    `;
+    // Default Vehicle Icon
+    return `<i data-lucide="car" class="${cssClass} text-blue-500"></i>`;
 };
+
+// ==================== THEME MANAGEMENT ====================
+const applyTheme = (theme) => {
+    if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', 'sun');
+            if (window.lucide) lucide.createIcons();
+        }
+    } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+        if (themeIcon) {
+            themeIcon.setAttribute('data-lucide', 'moon');
+            if (window.lucide) lucide.createIcons();
+        }
+    }
+
+    if (leafletMap && currentMapMode) {
+        updateMapTileLayer();
+    }
+};
+
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.contains('dark');
+        applyTheme(isDark ? 'light' : 'dark');
+    });
+}
+
+// Network Status
+const updateOnlineStatus = () => {
+    if (navigator.onLine) {
+        if (networkStatus) {
+            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> Online';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5';
+        }
+        if (offlineBanner) offlineBanner.classList.add('hidden');
+    } else {
+        if (networkStatus) {
+            networkStatus.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span> Offline';
+            networkStatus.className = 'flex items-center text-[10px] font-medium text-amber-600 dark:text-amber-400 mt-0.5';
+        }
+        if (offlineBanner) offlineBanner.classList.remove('hidden');
+    }
+};
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+
+// PWA Install Prompt
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (installPwaBtn) installPwaBtn.classList.remove('hidden');
+});
+
+if (installPwaBtn) {
+    installPwaBtn.addEventListener('click', async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                installPwaBtn.classList.add('hidden');
+            }
+            deferredPrompt = null;
+        }
+    });
+}
 
 // ==================== VEHICLE SPECS & PRESETS ====================
 const defaultVehicleSpecs = {
     'ADV 150': {
         tankCapacity: 8.0,
         fuelGrade: '91 RON Unleaded',
-        fuelDesc: 'Recommended: Regular Unleaded (Petron Xtra, Shell FuelSave 91, Caltex Silver)'
+        fuelDesc: 'Recommended: Regular Unleaded 91 (Petron Xtra, Shell FuelSave 91, Caltex Silver)'
     },
     'Chery': {
         tankCapacity: 51.0,
         fuelGrade: '95 RON Premium',
-        fuelDesc: 'Recommended: Premium Unleaded (Petron XCS 95, Shell V-Power 95, Caltex Platinum)'
+        fuelDesc: 'Recommended: Premium Gasoline 95+ (Petron XCS, Shell V-Power, Caltex Platinum)'
     },
-    'Chery Tiggo 8 Pro': {
+    'Cherry': {
         tankCapacity: 51.0,
         fuelGrade: '95 RON Premium',
-        fuelDesc: 'Recommended: Premium Unleaded (Petron XCS 95, Shell V-Power 95, Caltex Platinum)'
-    },
-    'Tiggo 8 Pro': {
-        tankCapacity: 51.0,
-        fuelGrade: '95 RON Premium',
-        fuelDesc: 'Recommended: Premium Unleaded (Petron XCS 95, Shell V-Power 95, Caltex Platinum)'
+        fuelDesc: 'Recommended: Premium Gasoline 95+ (Petron XCS, Shell V-Power, Caltex Platinum)'
     }
 };
 
@@ -538,6 +650,15 @@ const syncProfilesFromRecords = () => {
             }
         }
     });
+    tripRecords.forEach(r => {
+        if (r.profile) {
+            const p = r.profile === 'Cherry' ? 'Chery' : r.profile;
+            if (!profiles.includes(p)) {
+                profiles.push(p);
+                changed = true;
+            }
+        }
+    });
     if (changed) {
         localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
         renderProfiles();
@@ -598,153 +719,250 @@ const updateOdometerHints = () => {
 };
 
 // ==================== CHART ====================
-const updateChart = (processedData) => {
+const updateChart = (data) => {
     const ctx = document.getElementById('efficiencyChart');
     if (!ctx) return;
+
+    const chartData = data.filter(r => r.kmPerLiter !== null);
+
+    if (chartData.length === 0) {
+        if (chartInstance) {
+            chartInstance.destroy();
+            chartInstance = null;
+        }
+        return;
+    }
+
+    const labels = chartData.map(r => {
+        const d = new Date(r.date);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    });
     
-    const chartData = (processedData || []).filter(d => d.kmPerLiter !== null && !isNaN(d.kmPerLiter));
-    const labels = chartData.map(d => new Date(d.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
-    const dataPoints = chartData.map(d => d.kmPerLiter);
+    const values = chartData.map(r => r.kmPerLiter);
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const gridColor = isDark ? '#1e293b' : '#f1f5f9';
+    const textColor = isDark ? '#94a3b8' : '#64748b';
 
     if (chartInstance) {
-        chartInstance.destroy();
-    }
-    
-    if (chartData.length === 0) return;
-
-    const isDarkMode = document.documentElement.classList.contains('dark');
-    const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
-    const tickColor = isDarkMode ? '#94a3b8' : '#64748b';
-    const lineColor = isDarkMode ? '#3b82f6' : '#2563eb';
-    const bgColor = isDarkMode ? 'rgba(59, 130, 246, 0.15)' : 'rgba(37, 99, 235, 0.1)';
-    const pointColor = isDarkMode ? '#60a5fa' : '#2563eb';
-
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Efficiency (km/L)',
-                data: dataPoints,
-                borderColor: lineColor,
-                backgroundColor: bgColor,
-                borderWidth: 2.5,
-                tension: 0.3,
-                fill: true,
-                pointBackgroundColor: pointColor,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: isDarkMode ? '#0f172a' : '#1e293b',
-                    titleColor: isDarkMode ? '#f8fafc' : '#ffffff',
-                    bodyColor: isDarkMode ? '#cbd5e1' : '#f1f5f9',
-                    borderColor: isDarkMode ? '#334155' : 'transparent',
-                    borderWidth: 1,
-                    callbacks: {
-                        label: function(context) { return ' ' + context.parsed.y.toFixed(2) + ' km/L'; }
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].data = values;
+        chartInstance.options.scales.x.grid.color = gridColor;
+        chartInstance.options.scales.y.grid.color = gridColor;
+        chartInstance.options.scales.x.ticks.color = textColor;
+        chartInstance.options.scales.y.ticks.color = textColor;
+        chartInstance.update();
+    } else {
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Fuel Economy (km/L)',
+                    data: values,
+                    borderColor: '#2563eb',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#2563eb',
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `${context.parsed.y.toFixed(2)} km/L`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: { color: gridColor },
+                        ticks: {
+                            color: textColor,
+                            callback: (value) => `${value} km/L`
+                        }
+                    },
+                    x: {
+                        grid: { color: gridColor },
+                        ticks: { color: textColor }
                     }
                 }
-            },
-            scales: {
-                x: {
-                    grid: { color: gridColor },
-                    ticks: { color: tickColor }
-                },
-                y: {
-                    grid: { color: gridColor },
-                    ticks: { color: tickColor },
-                    title: { display: true, text: 'km/L', color: tickColor }
-                }
             }
-        }
-    });
+        });
+    }
 };
 
-// ==================== DASHBOARD STATS ====================
+// ==================== STATS & DASHBOARD ====================
 const updateStats = (processedData) => {
-    if (!statAvgEconomy || !statAvgCost || !statMonthlyPesos || !statMonthlyLiters || !statTrueCost || !statTotalDist) return;
-
-    if (!processedData || processedData.length < 2) {
-        statAvgEconomy.textContent = "-- km/L";
-        statAvgCost.textContent = "₱--";
-        statMonthlyPesos.textContent = "₱--";
-        statMonthlyLiters.textContent = "-- L / month";
-        statTrueCost.textContent = "₱--";
-        statTotalDist.textContent = "-- km";
-        
-        const latestPrice = (processedData && processedData.length === 1) ? (processedData[0].pricePerLiter || 0) : 0;
-        updateVehicleSpecsAndRange(0, latestPrice, 0);
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    
+    if (processedData.length <= 1) {
+        statAvgEconomy.textContent = '-- km/L';
+        statAvgCost.textContent = '₱--';
+        statMonthlyPesos.textContent = '₱--';
+        statMonthlyLiters.textContent = '-- L / month';
+        statTrueCost.textContent = '₱--';
+        statTotalDist.textContent = '-- km';
+        updateVehicleSpecsAndRange(0, 0, 0);
         return;
     }
 
     let totalTripKm = 0;
     let totalLiters = 0;
-    let totalAmount = 0;
-    
+    let totalFuelAmount = 0;
+
     for (let i = 1; i < processedData.length; i++) {
         if (processedData[i].tripKm) totalTripKm += processedData[i].tripKm;
-        if (processedData[i].liters) totalLiters += processedData[i].liters;
-        if (processedData[i].amount) totalAmount += processedData[i].amount;
+        if (processedData[i].liters) {
+            totalLiters += processedData[i].liters;
+            totalFuelAmount += (processedData[i].liters * processedData[i].pricePerLiter);
+        }
     }
 
-    const avgEconomy = totalLiters > 0 ? totalTripKm / totalLiters : 0;
-    const fuelCostPerKm = totalTripKm > 0 ? totalAmount / totalTripKm : 0;
+    const avgEconomy = totalLiters > 0 ? (totalTripKm / totalLiters) : 0;
+    const fuelCostPerKm = totalTripKm > 0 ? (totalFuelAmount / totalTripKm) : 0;
+
+    const profileMaint = maintRecords.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+    const totalMaintCost = profileMaint.reduce((sum, r) => sum + (Number(r.cost) || 0), 0);
+    const trueCostPerKm = totalTripKm > 0 ? ((totalFuelAmount + totalMaintCost) / totalTripKm) : fuelCostPerKm;
+
+    statAvgEconomy.textContent = avgEconomy > 0 ? `${formatNumber(avgEconomy)} km/L` : '-- km/L';
+    statAvgCost.textContent = fuelCostPerKm > 0 ? `${formatCurrency(fuelCostPerKm)}/km` : '₱--';
+    statTrueCost.textContent = trueCostPerKm > 0 ? `${formatCurrency(trueCostPerKm)}/km` : '₱--';
+    statTotalDist.textContent = `${formatNumber(totalTripKm, 0)} km`;
+
+    const sortedByDate = [...processedData].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const firstDate = new Date(sortedByDate[0].date);
+    const lastDate = new Date(sortedByDate[sortedByDate.length - 1].date);
+    const diffDays = Math.max(1, Math.ceil(Math.abs(lastDate - firstDate) / (1000 * 60 * 60 * 24)));
+
+    const kmPerDay = totalTripKm / diffDays;
+    const monthlyKm = kmPerDay * 30;
+    const monthlyLiters = avgEconomy > 0 ? (monthlyKm / avgEconomy) : 0;
     
-    const latestRecord = processedData[processedData.length - 1];
-    const firstRecord = processedData[0];
-    const totalDistance = latestRecord.odometer - firstRecord.odometer;
+    const latestPrice = sortedByDate[sortedByDate.length - 1].pricePerLiter || 0;
+    const monthlyPesos = monthlyLiters * latestPrice;
 
-    const firstDate = new Date(firstRecord.date);
-    const latestDate = new Date(latestRecord.date);
-    const totalDays = Math.max(1, Math.round(Math.abs(latestDate - firstDate) / (1000 * 60 * 60 * 24)));
-    
-    let monthlyLiters = 0;
-    let monthlyPesos = 0;
+    statMonthlyPesos.textContent = monthlyPesos > 0 ? formatCurrency(monthlyPesos) : '₱--';
+    statMonthlyLiters.textContent = monthlyLiters > 0 ? `${formatNumber(monthlyLiters, 1)} L / month` : '-- L / month';
 
-    if (totalDays > 0 && avgEconomy > 0) {
-        const dailyKm = totalTripKm / totalDays;
-        const monthlyKm = dailyKm * 30;
-        monthlyLiters = monthlyKm / avgEconomy;
-        const avgPricePerLiter = totalLiters > 0 ? (totalAmount / totalLiters) : (latestRecord.pricePerLiter || 0);
-        monthlyPesos = monthlyLiters * avgPricePerLiter;
-    } else if (latestRecord.pesosIn30Days) {
-        monthlyPesos = latestRecord.pesosIn30Days;
-        monthlyLiters = latestRecord.litersIn30Days || 0;
-    }
-
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
-    const totalMaintAmount = profileMaint.reduce((sum, r) => sum + (r.cost || 0), 0);
-    const trueCostPerKm = totalDistance > 0 ? (totalAmount + totalMaintAmount) / totalDistance : 0;
-
-    statAvgEconomy.textContent = `${formatNumber(avgEconomy)} km/L`;
-    statAvgCost.textContent = `${formatCurrency(fuelCostPerKm)}/km`;
-    statMonthlyPesos.textContent = formatCurrency(monthlyPesos);
-    statMonthlyLiters.textContent = `~${formatNumber(monthlyLiters)} L / month (30d)`;
-    statTrueCost.textContent = `${formatCurrency(trueCostPerKm)}/km`;
-    statTotalDist.textContent = `${formatNumber(totalDistance, 0)} km`;
-
-    const latestPrice = latestRecord.pricePerLiter || 0;
     updateVehicleSpecsAndRange(avgEconomy, latestPrice, fuelCostPerKm);
 };
 
-// ==================== RENDER TABLES ====================
+// ==================== PREVENTATIVE MAINTENANCE METERS ====================
+const defaultServiceSchedules = {
+    'Oil Change': { intervalKm: 2000, icon: 'droplet', color: 'blue' },
+    'Gear Oil': { intervalKm: 4000, icon: 'shield', color: 'indigo' },
+    'CVT Cleaning / Belt': { intervalKm: 8000, icon: 'cog', color: 'orange' },
+    'Spark Plug / Air Filter': { intervalKm: 6000, icon: 'zap', color: 'amber' }
+};
+
+const renderServiceReminders = () => {
+    if (!serviceRemindersGrid) return;
+    serviceRemindersGrid.innerHTML = '';
+
+    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+    const currentOdo = getCurrentVehicleOdometer(currentProfileName);
+
+    if (reminderCurrentOdo) {
+        reminderCurrentOdo.textContent = currentOdo > 0 ? `${formatNumber(currentOdo, 0)} km` : 'No odometer logged';
+    }
+
+    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+
+    const customKey = `custom_services_${currentProfileName}`;
+    const customList = JSON.parse(localStorage.getItem(customKey)) || [];
+
+    const allSchedules = { ...defaultServiceSchedules };
+    customList.forEach(c => {
+        allSchedules[c.type] = { intervalKm: c.intervalKm, icon: 'wrench', color: 'purple' };
+    });
+
+    Object.keys(allSchedules).forEach(serviceType => {
+        const schedule = allSchedules[serviceType];
+        const matchingLogs = profileMaint
+            .filter(r => r.type && r.type.toLowerCase() === serviceType.toLowerCase())
+            .sort((a, b) => Number(b.odometer) - Number(a.odometer));
+
+        const lastServiceOdo = matchingLogs.length > 0 ? Number(matchingLogs[0].odometer) : 0;
+        const kmSinceLast = currentOdo >= lastServiceOdo ? (currentOdo - lastServiceOdo) : 0;
+        const kmRemaining = schedule.intervalKm - kmSinceLast;
+        const percentUsed = Math.min(100, Math.max(0, (kmSinceLast / schedule.intervalKm) * 100));
+
+        let healthColorClass = 'bg-emerald-500';
+        let badgeBg = 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300';
+        let statusText = `${formatNumber(Math.max(0, kmRemaining), 0)} km left`;
+
+        if (percentUsed >= 100) {
+            healthColorClass = 'bg-red-500 animate-pulse';
+            badgeBg = 'bg-red-100 dark:bg-red-950/70 text-red-800 dark:text-red-300';
+            statusText = `Overdue by ${formatNumber(Math.abs(kmRemaining), 0)} km!`;
+        } else if (percentUsed >= 80) {
+            healthColorClass = 'bg-amber-500';
+            badgeBg = 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300';
+            statusText = `Due soon: ${formatNumber(kmRemaining, 0)} km left`;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'bg-gray-50 dark:bg-slate-950 rounded-xl p-4 border border-gray-200/80 dark:border-slate-800 flex flex-col justify-between hover:shadow-xs transition-shadow';
+        card.innerHTML = `
+            <div>
+                <div class="flex items-start justify-between mb-2">
+                    <span class="text-xs font-bold text-gray-900 dark:text-white">${serviceType}</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeBg}">${statusText}</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-slate-800 rounded-full h-2 mt-2 mb-2 overflow-hidden">
+                    <div class="${healthColorClass} h-2 rounded-full transition-all duration-500" style="width: ${percentUsed}%"></div>
+                </div>
+            </div>
+            <div class="flex justify-between items-center text-[11px] text-gray-500 dark:text-slate-400 mt-2 pt-2 border-t border-gray-200/60 dark:border-slate-800/80">
+                <span>Last: ${lastServiceOdo > 0 ? formatNumber(lastServiceOdo, 0) + ' km' : 'Never'}</span>
+                <span>Every: ${formatNumber(schedule.intervalKm, 0)} km</span>
+            </div>
+        `;
+        serviceRemindersGrid.appendChild(card);
+    });
+
+    if (window.lucide) lucide.createIcons();
+};
+
+if (addCustomServiceBtn) {
+    addCustomServiceBtn.addEventListener('click', () => {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const name = prompt(`Enter custom service name for "${currentProfileName}" (e.g. Brake Fluid, Coolant, Tire Rotation):`);
+        if (!name || !name.trim()) return;
+
+        const interval = prompt(`Every how many km should "${name}" be performed? (e.g. 10000):`, '10000');
+        if (!interval || isNaN(interval) || parseFloat(interval) <= 0) return;
+
+        const customKey = `custom_services_${currentProfileName}`;
+        const customList = JSON.parse(localStorage.getItem(customKey)) || [];
+        customList.push({ type: name.trim(), intervalKm: parseFloat(interval) });
+        localStorage.setItem(customKey, JSON.stringify(customList));
+
+        renderServiceReminders();
+    });
+}
+
+// ==================== TABLES RENDERERS ====================
 const renderTable = () => {
     if (!historyTableBody) return;
     historyTableBody.innerHTML = '';
+
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-    const tableEl = document.querySelector('#view-fuel table');
+    const profileRecords = records.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
     const specs = getVehicleSpecs(currentProfileName);
     const avgEconomy = getVehicleAvgEconomy(currentProfileName);
-    
+
+    const tableEl = historyTableBody.closest('table');
     if (profileRecords.length === 0) {
         if (emptyState) emptyState.classList.remove('hidden');
         if (tableEl) tableEl.classList.add('hidden');
@@ -848,7 +1066,7 @@ const renderMaintenanceTable = () => {
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">${row.notes || '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-950/20">${formatCurrency(row.cost)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editMaintRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
+                <button onclick="editMaintRecord('${row.id}')" class="text-orange-600 dark:text-orange-400 hover:text-orange-900 dark:hover:text-orange-300 p-1 rounded-md hover:bg-orange-50 dark:hover:bg-orange-950/50 transition-colors mr-1" title="Edit">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
                 <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
@@ -858,398 +1076,282 @@ const renderMaintenanceTable = () => {
         `;
         maintTableBody.appendChild(tr);
     });
+
     if (window.lucide) lucide.createIcons();
-    
-    const currentProfileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-    const processedData = processRecords(currentProfileRecords);
-    updateStats(processedData);
     updateOdometerHints();
     renderServiceReminders();
 };
 
-// ==================== SERVICE REMINDERS ====================
-const defaultServices = [
-    { id: 'oil_change', name: 'Oil Change', defaultInterval: 2000, icon: 'droplet', matchTypes: ['oil change', 'engine oil'] },
-    { id: 'gear_oil', name: 'Gear Oil', defaultInterval: 4000, icon: 'disc', matchTypes: ['gear oil', 'transmission'] },
-    { id: 'cvt_belt', name: 'CVT Belt / Spark Plug / Air Filter', defaultInterval: 8000, icon: 'cpu', matchTypes: ['cvt cleaning / belt', 'cvt', 'belt', 'spark plug', 'air filter'] },
-    { id: 'brakes_tires', name: 'Brakes & Tires Inspection', defaultInterval: 5000, icon: 'shield', matchTypes: ['brakes', 'tires'] }
-];
+// ==================== RENDER RECORDED TRIPS & TRAVEL TIMES TABLE ====================
+const renderTripsTable = () => {
+    if (!tripsTableBody) return;
+    tripsTableBody.innerHTML = '';
 
-const getServicesConfig = () => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const key = `service_config_${currentProfileName}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-        try { return JSON.parse(stored); } catch (e) { }
+    const profileTrips = tripRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+    const tableContainer = tripsTableBody.closest('table');
+
+    if (profileTrips.length === 0) {
+        if (tripsEmptyState) tripsEmptyState.classList.remove('hidden');
+        if (tableContainer) tableContainer.classList.add('hidden');
+        return;
     }
-    return defaultServices;
-};
 
-const saveServicesConfig = (config) => {
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const key = `service_config_${currentProfileName}`;
-    localStorage.setItem(key, JSON.stringify(config));
-};
+    if (tripsEmptyState) tripsEmptyState.classList.add('hidden');
+    if (tableContainer) tableContainer.classList.remove('hidden');
 
-window.editServiceInterval = (serviceId) => {
-    const config = getServicesConfig();
-    const service = config.find(s => s.id === serviceId);
-    if (!service) return;
+    const displayTrips = [...profileTrips].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    const currentInterval = service.defaultInterval;
-    const input = prompt(`Enter service interval in kilometers for "${service.name}":`, currentInterval);
-    if (input && !isNaN(input) && parseFloat(input) > 0) {
-        service.defaultInterval = parseFloat(input);
-        saveServicesConfig(config);
-        renderServiceReminders();
-    }
-};
+    displayTrips.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50 dark:hover:bg-slate-800/60 transition-colors';
+        const dateObj = new Date(row.date);
+        const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        const formattedTime = dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-window.quickLogService = (serviceName) => {
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const currentOdo = getCurrentVehicleOdometer(currentProfileName);
+        const estSec = row.estimatedSec || 0;
+        const actualSec = row.actualSec || 0;
+        const diffSec = actualSec - estSec;
 
-    if (maintDateInput) maintDateInput.valueAsDate = new Date();
-    if (maintOdoInput) maintOdoInput.value = currentOdo > 0 ? currentOdo : '';
-    
-    if (maintTypeInput) {
-        let found = false;
-        for (let i = 0; i < maintTypeInput.options.length; i++) {
-            if (maintTypeInput.options[i].text.toLowerCase() === serviceName.toLowerCase() ||
-                serviceName.toLowerCase().includes(maintTypeInput.options[i].value.toLowerCase())) {
-                maintTypeInput.selectedIndex = i;
-                found = true;
-                break;
+        let diffHtml = '<span class="text-gray-400 dark:text-slate-500">-</span>';
+        if (actualSec > 0 && estSec > 0) {
+            const diffMin = Math.round(diffSec / 60);
+            if (diffMin > 1) {
+                const pct = Math.round((diffSec / estSec) * 100);
+                diffHtml = `<span class="inline-flex items-center text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/60">+${diffMin}m (+${pct}%)</span>`;
+            } else if (diffMin < -1) {
+                diffHtml = `<span class="inline-flex items-center text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-900/60">${diffMin}m (Faster)</span>`;
+            } else {
+                diffHtml = `<span class="inline-flex items-center text-xs font-semibold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-900/60">On Time</span>`;
             }
         }
-        if (!found) {
-            const opt = document.createElement('option');
-            opt.value = serviceName;
-            opt.textContent = serviceName;
-            opt.selected = true;
-            maintTypeInput.appendChild(opt);
-        }
-    }
 
-    if (maintCostInput) maintCostInput.focus();
-    maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-};
-
-if (addCustomServiceBtn) {
-    addCustomServiceBtn.addEventListener('click', () => {
-        const name = prompt('Enter service name (e.g. Brake Fluid, Coolant Flush, Battery):');
-        if (!name || !name.trim()) return;
-        
-        const intervalInput = prompt(`Enter service interval in kilometers for "${name.trim()}":`, '5000');
-        if (!intervalInput || isNaN(intervalInput) || parseFloat(intervalInput) <= 0) return;
-        
-        const config = getServicesConfig();
-        const id = 'custom_' + Date.now();
-        config.push({
-            id: id,
-            name: name.trim(),
-            defaultInterval: parseFloat(intervalInput),
-            icon: 'wrench',
-            matchTypes: [name.trim().toLowerCase()]
-        });
-        saveServicesConfig(config);
-        
-        if (maintTypeInput) {
-            const opt = document.createElement('option');
-            opt.value = name.trim();
-            opt.textContent = name.trim();
-            maintTypeInput.appendChild(opt);
-        }
-
-        renderServiceReminders();
-    });
-}
-
-const renderServiceReminders = () => {
-    if (!serviceRemindersGrid) return;
-    
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const currentOdo = getCurrentVehicleOdometer(currentProfileName);
-    
-    if (reminderCurrentOdo) {
-        reminderCurrentOdo.textContent = `${formatNumber(currentOdo, 0)} km`;
-    }
-
-    const config = getServicesConfig();
-    const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
-    
-    serviceRemindersGrid.innerHTML = '';
-
-    config.forEach(service => {
-        const interval = service.defaultInterval;
-        
-        const matchingLogs = profileMaint.filter(r => {
-            if (!r.type) return false;
-            const logType = r.type.toLowerCase();
-            return service.matchTypes ? service.matchTypes.some(m => logType.includes(m)) : logType.includes(service.name.toLowerCase());
-        }).sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        let lastServiceOdo = 0;
-        let lastServiceDate = null;
-        let hasLogged = false;
-
-        if (matchingLogs.length > 0) {
-            lastServiceOdo = parseFloat(matchingLogs[0].odometer) || 0;
-            lastServiceDate = new Date(matchingLogs[0].date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-            hasLogged = true;
-        }
-
-        const kmSinceLast = Math.max(0, currentOdo - lastServiceOdo);
-        const remainingKm = interval - kmSinceLast;
-        const percentUsed = Math.min(100, Math.max(0, (kmSinceLast / interval) * 100));
-
-        let statusText = '';
-        let statusBadgeClass = '';
-        let progressBarColor = 'bg-emerald-500';
-        let statusIcon = 'check-circle';
-
-        if (remainingKm <= 0) {
-            const overdueKm = Math.abs(remainingKm);
-            statusText = `OVERDUE by ${formatNumber(overdueKm, 0)} km`;
-            statusBadgeClass = 'bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900';
-            progressBarColor = 'bg-rose-600';
-            statusIcon = 'alert-triangle';
-        } else if (remainingKm <= interval * 0.25) {
-            statusText = `Due soon! (${formatNumber(remainingKm, 0)} km left)`;
-            statusBadgeClass = 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900';
-            progressBarColor = 'bg-amber-500';
-            statusIcon = 'clock';
-        } else {
-            statusText = `Due in ${formatNumber(remainingKm, 0)} km`;
-            statusBadgeClass = 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900';
-            progressBarColor = 'bg-emerald-500';
-            statusIcon = 'shield-check';
-        }
-
-        const card = document.createElement('div');
-        card.className = 'bg-gray-50 dark:bg-slate-950 rounded-xl p-4 border border-gray-200 dark:border-slate-800 flex flex-col justify-between hover:shadow-sm transition-all';
-        card.innerHTML = `
-            <div>
-                <div class="flex items-start justify-between mb-2">
-                    <div class="flex items-center space-x-2">
-                        <div class="p-2 rounded-lg bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 shadow-2xs text-gray-700 dark:text-slate-300">
-                            <i data-lucide="${service.icon || 'wrench'}" class="h-4 w-4 text-orange-600 dark:text-orange-400"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-gray-900 dark:text-white leading-tight">${service.name}</h4>
-                    </div>
-                    <button onclick="editServiceInterval('${service.id}')" class="text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 p-1 rounded-md transition-colors" title="Adjust interval (current: every ${formatNumber(interval, 0)} km)">
-                        <i data-lucide="settings" class="h-3.5 w-3.5"></i>
-                    </button>
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100">
+                <div class="font-medium">${formattedDate}</div>
+                <div class="text-[11px] text-gray-400 dark:text-slate-500">${formattedTime}</div>
+            </td>
+            <td class="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">
+                <div class="flex items-center space-x-1.5">
+                    <span>${row.origin || 'Start'}</span>
+                    <i data-lucide="arrow-right" class="h-3.5 w-3.5 text-blue-500 shrink-0 inline"></i>
+                    <span>${row.destination || 'Destination'}</span>
+                    ${row.isRoundTrip ? '<span class="ml-1 text-[10px] bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 px-1.5 py-0.2 rounded font-bold">2-Way</span>' : ''}
                 </div>
-
-                <div class="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 mb-2">
-                    <span>Interval: <strong class="text-gray-700 dark:text-slate-200">${formatNumber(interval, 0)} km</strong></span>
-                    <span class="text-[11px] ${hasLogged ? 'text-gray-600 dark:text-slate-400' : 'text-gray-400 dark:text-slate-500'}">
-                        ${hasLogged ? `Last: ${formatNumber(lastServiceOdo, 0)} km` : 'No logs yet'}
-                    </span>
-                </div>
-
-                <div class="w-full bg-gray-200 dark:bg-slate-800 rounded-full h-2 mb-2.5 overflow-hidden">
-                    <div class="${progressBarColor} h-2 rounded-full transition-all duration-500" style="width: ${percentUsed}%;"></div>
-                </div>
-
-                <div class="flex items-center justify-between mb-3">
-                    <span class="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md border ${statusBadgeClass}">
-                        <i data-lucide="${statusIcon}" class="h-3 w-3 mr-1"></i>
-                        ${statusText}
-                    </span>
-                    <span class="text-[11px] font-medium text-gray-500 dark:text-slate-400">${formatNumber(kmSinceLast, 0)} / ${formatNumber(interval, 0)} km</span>
-                </div>
-            </div>
-
-            <button onclick="quickLogService('${service.name}')" class="w-full mt-2 text-xs bg-white dark:bg-slate-900 hover:bg-orange-50 dark:hover:bg-orange-950/40 text-orange-700 dark:text-orange-400 font-semibold py-1.5 px-3 rounded-lg border border-orange-200 dark:border-orange-900/60 transition-colors flex items-center justify-center shadow-2xs">
-                <i data-lucide="plus" class="h-3.5 w-3.5 mr-1"></i> Log Service
-            </button>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-gray-900 dark:text-white">${formatNumber(row.distanceKm, 1)} km</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-blue-700 dark:text-blue-300 font-medium bg-blue-50/50 dark:bg-blue-950/20">${formatDuration(estSec)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/40 border-x border-emerald-100 dark:border-emerald-900/40">
+                ${actualSec > 0 ? formatDuration(actualSec) : '<span class="text-gray-400 font-normal">--</span>'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right">${diffHtml}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-white">
+                <div class="font-bold text-blue-600 dark:text-blue-400">${formatCurrency(row.tripCost)}</div>
+                <div class="text-[11px] text-gray-400 dark:text-slate-500">${formatNumber(row.fuelConsumed, 2)} L</div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button onclick="deleteTripRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete Trip Record">
+                    <i data-lucide="trash-2" class="h-4 w-4"></i>
+                </button>
+            </td>
         `;
-        serviceRemindersGrid.appendChild(card);
+        tripsTableBody.appendChild(tr);
     });
 
     if (window.lucide) lucide.createIcons();
 };
 
-// ==================== GEOCODING & AUTOCOMPLETE (GOOGLE MAPS STYLE) ====================
-const geocodeCache = new Map();
-
-const searchNominatim = async (query) => {
-    if (!query || query.trim().length < 2) return [];
-    const clean = query.trim();
-    if (geocodeCache.has(clean)) return geocodeCache.get(clean);
-
-    try {
-        // Query Philippines results first
-        const phUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(clean)}&countrycodes=ph&limit=6&addressdetails=1`;
-        const res = await fetch(phUrl, { headers: { 'Accept-Language': 'en' } });
-        let data = await res.json();
-
-        // If no results in PH, search globally
-        if (!data || data.length === 0) {
-            const globalUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(clean)}&limit=5&addressdetails=1`;
-            const gRes = await fetch(globalUrl, { headers: { 'Accept-Language': 'en' } });
-            data = await gRes.json();
+window.deleteTripRecord = async (id) => {
+    if (confirm('Delete this trip record?')) {
+        try {
+            await deleteDoc(doc(db, "tripRecords", id));
+        } catch (err) {
+            alert('Failed to delete trip record: ' + err.message);
         }
-
-        geocodeCache.set(clean, data || []);
-        return data || [];
-    } catch (err) {
-        console.warn('Geocoding search error:', err);
-        return [];
     }
 };
 
-const reverseGeocode = async (lat, lng) => {
-    try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
-        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-        const data = await res.json();
-        if (data && data.display_name) {
-            const parts = data.display_name.split(', ');
-            return parts.slice(0, 3).join(', ');
-        }
-        return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    } catch (e) {
-        return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    }
-};
-
-// Generic Search Dropdown Binder
-const setupLocationSearch = (inputEl, clearBtnEl, resultsEl, onSelectCallback) => {
-    if (!inputEl || !resultsEl) return;
-
-    let debounceTimer = null;
-
-    const renderResults = (items) => {
-        resultsEl.innerHTML = '';
-        if (!items || items.length === 0) {
-            resultsEl.classList.add('hidden');
-            return;
-        }
-
-        items.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'p-3 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex items-start space-x-2.5';
-            
-            const parts = (item.display_name || '').split(', ');
-            const mainTitle = parts[0] || item.name || 'Location';
-            const subTitle = parts.slice(1, 4).join(', ');
-
-            div.innerHTML = `
-                <div class="p-1.5 rounded-lg bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400 shrink-0 mt-0.5">
-                    <i data-lucide="map-pin" class="h-4 w-4 text-red-500"></i>
-                </div>
-                <div class="min-w-0 flex-1">
-                    <p class="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white truncate">${mainTitle}</p>
-                    <p class="text-[11px] text-gray-500 dark:text-slate-400 truncate">${subTitle}</p>
-                </div>
-            `;
-
-            div.addEventListener('click', () => {
-                inputEl.value = mainTitle;
-                resultsEl.classList.add('hidden');
-                if (clearBtnEl) clearBtnEl.classList.remove('hidden');
-                onSelectCallback(parseFloat(item.lat), parseFloat(item.lon), mainTitle);
-            });
-
-            resultsEl.appendChild(div);
-        });
-
-        resultsEl.classList.remove('hidden');
-        if (window.lucide) lucide.createIcons();
-    };
-
-    inputEl.addEventListener('input', () => {
-        const query = inputEl.value;
-        if (clearBtnEl) {
-            if (query.length > 0) clearBtnEl.classList.remove('hidden');
-            else clearBtnEl.classList.add('hidden');
-        }
-
-        clearTimeout(debounceTimer);
-        if (query.trim().length < 2) {
-            resultsEl.classList.add('hidden');
-            return;
-        }
-
-        debounceTimer = setTimeout(async () => {
-            const results = await searchNominatim(query);
-            renderResults(results);
-        }, 280);
-    });
-
-    if (clearBtnEl) {
-        clearBtnEl.addEventListener('click', () => {
-            inputEl.value = '';
-            clearBtnEl.classList.add('hidden');
-            resultsEl.classList.add('hidden');
-            inputEl.focus();
-        });
-    }
-
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-        if (!inputEl.contains(e.target) && !resultsEl.contains(e.target)) {
-            resultsEl.classList.add('hidden');
-        }
-    });
-};
-
-// ==================== LEAFLET MAP ENGINE ====================
+// ==================== MAP MODULE (LEAFLET + NOMINATIM + OSRM) ====================
 const initMap = () => {
     if (leafletMap) return;
-    const mapEl = document.getElementById('map');
-    if (!mapEl || !window.L) return;
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer || !window.L) return;
 
-    const isDarkMode = document.documentElement.classList.contains('dark');
-    
     leafletMap = L.map('map', {
-        zoomControl: true,
-        attributionControl: true
-    }).setView(radiusOrigin, 9);
-
-    updateMapTileLayer(isDarkMode);
-
-    leafletMap.on('click', async (e) => {
-        const { lat, lng } = e.latlng;
-        
-        if (currentMapMode === 'radius') {
-            radiusOrigin = [lat, lng];
-            renderRadiusCircle();
-            const placeName = await reverseGeocode(lat, lng);
-            if (radiusSearchInput) {
-                radiusSearchInput.value = placeName;
-                if (radiusClearSearchBtn) radiusClearSearchBtn.classList.remove('hidden');
-            }
-        } else if (currentMapMode === 'route') {
-            handleRouteMapClick(lat, lng);
-        }
+        center: radiusOrigin,
+        zoom: 9,
+        zoomControl: true
     });
 
+    updateMapTileLayer();
     renderRadiusCircle();
+
+    leafletMap.on('click', (e) => {
+        if (currentMapMode === 'radius') {
+            radiusOrigin = [e.latlng.lat, e.latlng.lng];
+            renderRadiusCircle();
+            reverseGeocode(e.latlng.lat, e.latlng.lng).then(name => {
+                if (radiusSearchInput) {
+                    radiusSearchInput.value = name;
+                    if (radiusClearSearchBtn) radiusClearSearchBtn.classList.remove('hidden');
+                }
+            });
+        } else if (currentMapMode === 'route') {
+            handleRouteMapClick(e.latlng.lat, e.latlng.lng);
+        }
+    });
 };
 
-const updateMapTileLayer = (isDark) => {
+const updateMapTileLayer = () => {
     if (!leafletMap || !window.L) return;
-    
+    const isDark = document.documentElement.classList.contains('dark');
+
     if (currentTileLayer) {
         leafletMap.removeLayer(currentTileLayer);
     }
 
     const tileUrl = isDark 
+        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+
+    const subdomains = 'abcd';
+    const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+    const tileOptions = isDark 
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
         : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
-    currentTileLayer = L.tileLayer(tileUrl, {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    currentTileLayer = L.tileLayer(tileOptions, {
+        attribution: attribution,
         maxZoom: 19,
-        subdomains: 'abcd'
+        subdomains: subdomains
     }).addTo(leafletMap);
 };
 
-// ==================== MAP: DYNAMIC RANGE RADIUS ====================
+// ==================== GEOCODING & AUTOCOMPLETE ====================
+let geocodeCache = {};
+
+const searchNominatim = async (query) => {
+    if (!query || query.trim().length < 2) return [];
+    const q = query.trim();
+    if (geocodeCache[q]) return geocodeCache[q];
+
+    try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=ph&limit=6&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const data = await res.json();
+        
+        if (data.length === 0) {
+            const fallbackUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&addressdetails=1`;
+            const fallbackRes = await fetch(fallbackUrl, { headers: { 'Accept-Language': 'en' } });
+            const fallbackData = await fallbackRes.json();
+            geocodeCache[q] = fallbackData;
+            return fallbackData;
+        }
+
+        geocodeCache[q] = data;
+        return data;
+    } catch (e) {
+        console.warn('Geocoding error:', e);
+        return [];
+    }
+};
+
+const reverseGeocode = async (lat, lon) => {
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&addressdetails=1`;
+        const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const data = await res.json();
+        if (data && data.display_name) {
+            const parts = data.display_name.split(',');
+            return parts.slice(0, 3).join(',').trim();
+        }
+    } catch (e) {
+        console.warn('Reverse geocode error:', e);
+    }
+    return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+};
+
+const setupLocationSearch = (inputEl, clearBtn, dropdownEl, onSelectCallback) => {
+    if (!inputEl || !dropdownEl) return;
+
+    let debounceTimer = null;
+
+    inputEl.addEventListener('input', () => {
+        const val = inputEl.value;
+        if (clearBtn) {
+            if (val.length > 0) clearBtn.classList.remove('hidden');
+            else clearBtn.classList.add('hidden');
+        }
+
+        clearTimeout(debounceTimer);
+        if (val.trim().length < 2) {
+            dropdownEl.classList.add('hidden');
+            dropdownEl.innerHTML = '';
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            dropdownEl.innerHTML = '<div class="p-3 text-xs text-gray-500 dark:text-slate-400 text-center flex items-center justify-center"><i data-lucide="loader-2" class="h-3.5 w-3.5 mr-1.5 animate-spin"></i> Searching locations...</div>';
+            dropdownEl.classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+
+            const results = await searchNominatim(val);
+            if (results.length === 0) {
+                dropdownEl.innerHTML = '<div class="p-3 text-xs text-gray-500 dark:text-slate-400 text-center">No locations found. Try another city or landmark.</div>';
+                return;
+            }
+
+            dropdownEl.innerHTML = '';
+            results.forEach(place => {
+                const item = document.createElement('div');
+                item.className = 'px-3.5 py-2.5 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer text-xs flex items-start space-x-2 transition-colors';
+                
+                const parts = place.display_name.split(',');
+                const title = parts[0];
+                const subtitle = parts.slice(1, 4).join(',').trim();
+
+                item.innerHTML = `
+                    <i data-lucide="map-pin" class="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0"></i>
+                    <div class="min-w-0">
+                        <strong class="block text-gray-900 dark:text-white font-semibold truncate">${title}</strong>
+                        <span class="text-[11px] text-gray-500 dark:text-slate-400 truncate block">${subtitle}</span>
+                    </div>
+                `;
+
+                item.addEventListener('click', () => {
+                    const lat = parseFloat(place.lat);
+                    const lon = parseFloat(place.lon);
+                    inputEl.value = `${title}, ${subtitle}`;
+                    dropdownEl.classList.add('hidden');
+                    if (clearBtn) clearBtn.classList.remove('hidden');
+                    if (onSelectCallback) onSelectCallback(lat, lon, title);
+                });
+
+                dropdownEl.appendChild(item);
+            });
+
+            if (window.lucide) lucide.createIcons();
+        }, 320);
+    });
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            inputEl.value = '';
+            clearBtn.classList.add('hidden');
+            dropdownEl.classList.add('hidden');
+            inputEl.focus();
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!inputEl.contains(e.target) && !dropdownEl.contains(e.target)) {
+            dropdownEl.classList.add('hidden');
+        }
+    });
+};
+
+// ==================== MAP: RADIUS VISUALIZER ====================
 const updateMapPanelDefaults = () => {
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const specs = getVehicleSpecs(currentProfileName);
@@ -1258,12 +1360,10 @@ const updateMapPanelDefaults = () => {
 
     if (radiusTargetVehicle) radiusTargetVehicle.textContent = currentProfileName;
     if (radiusAvgEcon) radiusAvgEcon.textContent = `${formatNumber(avgEconomy, 1)} km/L`;
-    
-    if (radiusSlider) {
-        radiusSlider.max = Math.max(600, Math.round(fullRange * 1.3));
-        if (parseFloat(radiusSlider.value) > parseFloat(radiusSlider.max)) {
-            radiusSlider.value = fullRange;
-        }
+
+    if (radiusSlider && !radiusSlider.dataset.userModified) {
+        radiusSlider.max = Math.max(800, Math.round(fullRange * 1.5));
+        radiusSlider.value = Math.round(fullRange);
     }
 
     renderRadiusCircle();
@@ -1271,32 +1371,36 @@ const updateMapPanelDefaults = () => {
 
 const renderRadiusCircle = () => {
     if (!leafletMap || !window.L) return;
-    
+
     const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
     const specs = getVehicleSpecs(currentProfileName);
     const avgEconomy = getVehicleAvgEconomy(currentProfileName);
     const latestPrice = getLatestFuelPrice(currentProfileName);
 
-    const rangeKm = radiusSlider ? parseFloat(radiusSlider.value) : (specs.tankCapacity * avgEconomy);
+    const rangeKm = radiusSlider ? parseFloat(radiusSlider.value) : 360;
     const radiusMeters = rangeKm * 1000;
 
-    if (radiusCircle) leafletMap.removeLayer(radiusCircle);
-    if (radiusMarker) leafletMap.removeLayer(radiusMarker);
-
-    if (currentMapMode === 'radius') {
+    if (radiusCircle) {
+        radiusCircle.setLatLng(radiusOrigin);
+        radiusCircle.setRadius(radiusMeters);
+    } else {
         radiusCircle = L.circle(radiusOrigin, {
             radius: radiusMeters,
-            color: '#3b82f6',
+            color: '#2563eb',
             fillColor: '#3b82f6',
-            fillOpacity: 0.16,
+            fillOpacity: 0.18,
             weight: 2
         }).addTo(leafletMap);
+    }
 
+    if (radiusMarker) {
+        radiusMarker.setLatLng(radiusOrigin);
+    } else {
         const customPinHtml = `
             <div class="relative flex items-center justify-center">
-                <span class="animate-ping absolute inline-flex h-7 w-7 rounded-full bg-blue-400 opacity-75"></span>
-                <div class="relative inline-flex rounded-full h-8 w-8 bg-blue-600 text-white items-center justify-center border-2 border-white shadow-lg text-xs font-bold">
-                    📍
+                <span class="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-blue-400 opacity-75"></span>
+                <div class="relative inline-flex rounded-full h-8 w-8 bg-blue-600 text-white items-center justify-center border-2 border-white shadow-lg">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 </div>
             </div>
         `;
@@ -1425,7 +1529,36 @@ const handleLocateMe = (btnEl) => {
 if (mapLocateBtn) mapLocateBtn.addEventListener('click', () => handleLocateMe(mapLocateBtn));
 if (mapCanvasLocateBtn) mapCanvasLocateBtn.addEventListener('click', () => handleLocateMe(mapCanvasLocateBtn));
 
-// ==================== MAP: TRIP ROUTE & COST CALCULATOR ====================
+// Quick Search on Map Canvas
+setupLocationSearch(mapQuickSearchInput, mapQuickSearchClear, mapQuickSearchResults, (lat, lng, name) => {
+    if (currentMapMode === 'radius') {
+        radiusOrigin = [lat, lng];
+        if (leafletMap) leafletMap.setView(radiusOrigin, 11);
+        renderRadiusCircle();
+        if (radiusSearchInput) {
+            radiusSearchInput.value = name;
+            if (radiusClearSearchBtn) radiusClearSearchBtn.classList.remove('hidden');
+        }
+    } else {
+        if (!routePinA) {
+            routePinA = [lat, lng];
+            if (routeOriginInput) routeOriginInput.value = name;
+            if (routeOriginClear) routeOriginClear.classList.remove('hidden');
+        } else {
+            routePinB = [lat, lng];
+            if (routeDestInput) routeDestInput.value = name;
+            if (routeDestClear) routeDestClear.classList.remove('hidden');
+        }
+        renderRouteMarkers();
+        if (routePinA && routePinB) {
+            calculateAndDrawRoute();
+        } else if (leafletMap) {
+            leafletMap.setView([lat, lng], 11);
+        }
+    }
+});
+
+// ==================== MAP: TRIP ROUTE & TRAVEL TIME ENGINE ====================
 const popularRoutes = {
     'tagaytay': { start: [14.5995, 120.9842], startName: 'Manila', end: [14.1153, 120.9621], endName: 'Tagaytay City' },
     'baguio': { start: [14.5995, 120.9842], startName: 'Manila', end: [16.4023, 120.5960], endName: 'Baguio City' },
@@ -1459,40 +1592,24 @@ setupLocationSearch(routeDestInput, routeDestClear, routeDestResults, (lat, lng,
     }
 });
 
-// Floating Quick Search Setup
-setupLocationSearch(mapQuickSearchInput, mapQuickSearchClear, mapQuickSearchResults, (lat, lng, name) => {
-    if (leafletMap) {
-        leafletMap.setView([lat, lng], 12);
-    }
-    if (currentMapMode === 'radius') {
-        radiusOrigin = [lat, lng];
-        if (radiusSearchInput) radiusSearchInput.value = name;
-        renderRadiusCircle();
-    } else {
-        if (!routePinA) {
-            routePinA = [lat, lng];
-            if (routeOriginInput) routeOriginInput.value = name;
-            renderRouteMarkers();
-        } else {
-            routePinB = [lat, lng];
-            if (routeDestInput) routeDestInput.value = name;
-            renderRouteMarkers();
-            calculateAndDrawRoute();
-        }
-    }
-});
-
-// Swap Route Origin & Destination
+// Swap Route Button
 if (swapRouteBtn) {
     swapRouteBtn.addEventListener('click', () => {
         const tempPin = routePinA;
         routePinA = routePinB;
         routePinB = tempPin;
 
+        const tempVal = routeOriginInput ? routeOriginInput.value : '';
         if (routeOriginInput && routeDestInput) {
-            const tempVal = routeOriginInput.value;
             routeOriginInput.value = routeDestInput.value;
             routeDestInput.value = tempVal;
+        }
+
+        if (routeOriginClear && routeDestClear) {
+            if (routeOriginInput.value) routeOriginClear.classList.remove('hidden');
+            else routeOriginClear.classList.add('hidden');
+            if (routeDestInput.value) routeDestClear.classList.remove('hidden');
+            else routeDestClear.classList.add('hidden');
         }
 
         renderRouteMarkers();
@@ -1557,7 +1674,6 @@ const handleRouteMapClick = async (lat, lng) => {
         renderRouteMarkers();
         calculateAndDrawRoute();
     } else {
-        // Reset and set new Pin A
         routePinA = [lat, lng];
         routePinB = null;
         if (routeOriginInput) {
@@ -1703,12 +1819,31 @@ const updateRouteResults = (distanceKm, durationSec) => {
     const tripCost = fuelConsumed * latestPrice;
     const tankPctUsed = specs.tankCapacity > 0 ? ((fuelConsumed / specs.tankCapacity) * 100) : 0;
 
-    const hrs = Math.floor(totalSec / 3600);
-    const mins = Math.round((totalSec % 3600) / 60);
-    const timeStr = hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`;
+    // Traffic calculation: Philippine congestion models (free-flow + 25% to 55% buffer)
+    const trafficLowSec = Math.round(totalSec * 1.25);
+    const trafficHighSec = Math.round(totalSec * 1.55);
+
+    // Current Time & ETA Window
+    const now = new Date();
+    const etaLow = new Date(now.getTime() + trafficLowSec * 1000);
+    const etaHigh = new Date(now.getTime() + trafficHighSec * 1000);
+
+    // Update Global Calculation Object
+    currentRouteData = {
+        distanceKm: totalKm,
+        estimatedSec: totalSec,
+        trafficLowSec: trafficLowSec,
+        trafficHighSec: trafficHighSec,
+        fuelConsumed: fuelConsumed,
+        tripCost: tripCost,
+        isRoundTrip: isRoundTrip
+    };
 
     if (routeDistanceVal) routeDistanceVal.textContent = `${formatNumber(totalKm, 1)} km ${isRoundTrip ? '(Round Trip)' : ''}`;
-    if (routeTimeVal) routeTimeVal.textContent = `~${timeStr}`;
+    if (routeTimeVal) routeTimeVal.textContent = `~${formatDurationFull(totalSec)}`;
+    if (routeTrafficTimeVal) routeTrafficTimeVal.textContent = `~${formatDuration(trafficLowSec)} – ${formatDuration(trafficHighSec)}`;
+    if (routeEtaVal) routeEtaVal.textContent = `~${formatTimeOfDay(etaLow)} – ${formatTimeOfDay(etaHigh)}`;
+    
     if (routeFuelVal) routeFuelVal.textContent = `${formatNumber(fuelConsumed, 2)} Liters`;
     if (routeTankPctVal) routeTankPctVal.textContent = `${formatNumber(tankPctUsed, 1)}% of ${specs.tankCapacity}L Tank`;
     if (routeCostVal) routeCostVal.textContent = formatCurrency(tripCost);
@@ -1720,8 +1855,180 @@ const updateRouteResults = (distanceKm, durationSec) => {
             routeRefuelWarning.classList.add('hidden');
         }
     }
+
+    if (recordedActualSec > 0) {
+        updateActualTimeComparison();
+    }
 };
 
+// ==================== LIVE ACTUAL TRIP TRACKER & STOPWATCH ====================
+const updateStopwatchDisplay = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    const formatted = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    if (tripStopwatchDisplay) tripStopwatchDisplay.textContent = formatted;
+};
+
+const updateActualTimeComparison = () => {
+    if (!currentRouteData || recordedActualSec <= 0) return;
+
+    if (actualRecordedTimeVal) {
+        actualRecordedTimeVal.textContent = formatDurationFull(recordedActualSec);
+    }
+
+    const estSec = currentRouteData.estimatedSec || 0;
+    const diffSec = recordedActualSec - estSec;
+    const diffMin = Math.round(diffSec / 60);
+
+    if (actualTimeDiffVal) {
+        if (estSec === 0) {
+            actualTimeDiffVal.textContent = 'Logged without route estimate';
+            actualTimeDiffVal.className = 'font-semibold text-gray-600 dark:text-slate-400';
+        } else if (diffMin > 1) {
+            const pct = Math.round((diffSec / estSec) * 100);
+            actualTimeDiffVal.innerHTML = `<span class="text-amber-600 dark:text-amber-400 font-bold">+${diffMin} min slower (+${pct}% delay)</span>`;
+        } else if (diffMin < -1) {
+            actualTimeDiffVal.innerHTML = `<span class="text-emerald-600 dark:text-emerald-400 font-bold">${diffMin} min faster than estimate</span>`;
+        } else {
+            actualTimeDiffVal.innerHTML = `<span class="text-blue-600 dark:text-blue-400 font-bold">On Schedule (±1 min)</span>`;
+        }
+    }
+};
+
+if (startTripBtn) {
+    startTripBtn.addEventListener('click', () => {
+        isTripRunning = true;
+        tripStartTime = Date.now();
+        
+        if (stopwatchInterval) clearInterval(stopwatchInterval);
+        
+        stopwatchInterval = setInterval(() => {
+            const elapsedSec = Math.floor((Date.now() - tripStartTime) / 1000);
+            updateStopwatchDisplay(elapsedSec);
+        }, 1000);
+
+        if (tripLiveStatusBadge) {
+            tripLiveStatusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-1 inline-block"></span> In Progress';
+            tripLiveStatusBadge.className = 'text-[11px] bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 font-bold px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800';
+        }
+
+        if (tripStopwatchHint) {
+            tripStopwatchHint.textContent = `Trip started at ${formatTimeOfDay(new Date())}`;
+        }
+
+        startTripBtn.disabled = true;
+        startTripBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+        if (finishTripBtn) {
+            finishTripBtn.disabled = false;
+            finishTripBtn.classList.remove('bg-gray-200', 'dark:bg-slate-800', 'text-gray-400', 'dark:text-slate-600', 'cursor-not-allowed');
+            finishTripBtn.classList.add('bg-orange-600', 'hover:bg-orange-700', 'text-white');
+        }
+
+        if (actualTripSummary) actualTripSummary.classList.add('hidden');
+    });
+}
+
+if (finishTripBtn) {
+    finishTripBtn.addEventListener('click', () => {
+        isTripRunning = false;
+        if (stopwatchInterval) clearInterval(stopwatchInterval);
+
+        const elapsedSec = tripStartTime ? Math.max(1, Math.floor((Date.now() - tripStartTime) / 1000)) : 0;
+        recordedActualSec = elapsedSec;
+
+        updateStopwatchDisplay(elapsedSec);
+
+        if (tripLiveStatusBadge) {
+            tripLiveStatusBadge.innerHTML = '<i data-lucide="check" class="h-3 w-3 inline mr-0.5"></i> Completed';
+            tripLiveStatusBadge.className = 'text-[11px] bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 font-bold px-2.5 py-0.5 rounded-full border border-blue-300 dark:border-blue-800';
+        }
+
+        if (tripStopwatchHint) {
+            tripStopwatchHint.textContent = `Finished at ${formatTimeOfDay(new Date())}`;
+        }
+
+        startTripBtn.disabled = false;
+        startTripBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        startTripBtn.innerHTML = '<i data-lucide="play" class="h-3.5 w-3.5 mr-1.5 fill-white"></i> Restart Trip';
+
+        finishTripBtn.disabled = true;
+        finishTripBtn.classList.add('bg-gray-200', 'dark:bg-slate-800', 'text-gray-400', 'dark:text-slate-600', 'cursor-not-allowed');
+        finishTripBtn.classList.remove('bg-orange-600', 'hover:bg-orange-700', 'text-white');
+
+        if (manualActualHrs) manualActualHrs.value = Math.floor(elapsedSec / 3600);
+        if (manualActualMins) manualActualMins.value = Math.round((elapsedSec % 3600) / 60);
+
+        updateActualTimeComparison();
+        if (actualTripSummary) actualTripSummary.classList.remove('hidden');
+        if (window.lucide) lucide.createIcons();
+    });
+}
+
+// Manual Hours and Mins Input listeners
+const handleManualActualTimeChange = () => {
+    const hrs = parseInt(manualActualHrs.value) || 0;
+    const mins = parseInt(manualActualMins.value) || 0;
+    recordedActualSec = (hrs * 3600) + (mins * 60);
+    updateStopwatchDisplay(recordedActualSec);
+    updateActualTimeComparison();
+};
+
+if (manualActualHrs) manualActualHrs.addEventListener('input', handleManualActualTimeChange);
+if (manualActualMins) manualActualMins.addEventListener('input', handleManualActualTimeChange);
+
+// Save Trip Record to Firestore Log
+if (saveTripLogBtn) {
+    saveTripLogBtn.addEventListener('click', async () => {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const originStr = (routeOriginInput && routeOriginInput.value) ? routeOriginInput.value.split(',')[0].trim() : 'Point A';
+        const destStr = (routeDestInput && routeDestInput.value) ? routeDestInput.value.split(',')[0].trim() : 'Point B';
+
+        const tripData = {
+            date: new Date().toISOString(),
+            profile: currentProfileName,
+            origin: originStr,
+            destination: destStr,
+            originFull: routeOriginInput ? routeOriginInput.value : '',
+            destFull: routeDestInput ? routeDestInput.value : '',
+            distanceKm: currentRouteData ? currentRouteData.distanceKm : 0,
+            estimatedSec: currentRouteData ? currentRouteData.estimatedSec : 0,
+            actualSec: recordedActualSec > 0 ? recordedActualSec : (currentRouteData ? currentRouteData.estimatedSec : 0),
+            fuelConsumed: currentRouteData ? currentRouteData.fuelConsumed : 0,
+            tripCost: currentRouteData ? currentRouteData.tripCost : 0,
+            isRoundTrip: routeRoundTripCheck ? routeRoundTripCheck.checked : false
+        };
+
+        const origBtnText = saveTripLogBtn.innerHTML;
+        saveTripLogBtn.disabled = true;
+        saveTripLogBtn.innerHTML = '<i data-lucide="loader-2" class="h-3.5 w-3.5 mr-1.5 animate-spin"></i> Saving...';
+        if (window.lucide) lucide.createIcons();
+
+        try {
+            await addDoc(collection(db, "tripRecords"), tripData);
+            
+            saveTripLogBtn.innerHTML = '<i data-lucide="check" class="h-3.5 w-3.5 mr-1.5"></i> Saved to Trip Log!';
+            saveTripLogBtn.classList.replace('bg-blue-600', 'bg-emerald-600');
+            if (window.lucide) lucide.createIcons();
+
+            setTimeout(() => {
+                saveTripLogBtn.disabled = false;
+                saveTripLogBtn.innerHTML = origBtnText;
+                saveTripLogBtn.classList.replace('bg-emerald-600', 'bg-blue-600');
+                if (window.lucide) lucide.createIcons();
+            }, 1800);
+        } catch (err) {
+            console.error('Error saving trip log:', err);
+            alert('Error saving trip: ' + err.message);
+            saveTripLogBtn.disabled = false;
+            saveTripLogBtn.innerHTML = origBtnText;
+            if (window.lucide) lucide.createIcons();
+        }
+    });
+}
+
+// Preset destination routes dropdown
 if (presetRouteSelect) {
     presetRouteSelect.addEventListener('change', (e) => {
         const val = e.target.value;
@@ -1752,6 +2059,8 @@ if (resetRouteBtn) {
     resetRouteBtn.addEventListener('click', () => {
         routePinA = null;
         routePinB = null;
+        currentRouteData = null;
+        recordedActualSec = 0;
         if (markerPinA && leafletMap) leafletMap.removeLayer(markerPinA);
         if (markerPinB && leafletMap) leafletMap.removeLayer(markerPinB);
         if (routeGeoJsonLayer && leafletMap) leafletMap.removeLayer(routeGeoJsonLayer);
@@ -1762,10 +2071,14 @@ if (resetRouteBtn) {
         if (presetRouteSelect) presetRouteSelect.value = '';
         if (routeDistanceVal) routeDistanceVal.textContent = '-- km';
         if (routeTimeVal) routeTimeVal.textContent = '--';
+        if (routeTrafficTimeVal) routeTrafficTimeVal.textContent = '--';
+        if (routeEtaVal) routeEtaVal.textContent = '--';
         if (routeFuelVal) routeFuelVal.textContent = '-- L';
         if (routeTankPctVal) routeTankPctVal.textContent = '--%';
         if (routeCostVal) routeCostVal.textContent = '₱0.00';
         if (routeRefuelWarning) routeRefuelWarning.classList.add('hidden');
+        if (actualTripSummary) actualTripSummary.classList.add('hidden');
+        updateStopwatchDisplay(0);
     });
 }
 
@@ -1800,132 +2113,102 @@ if (modeBtnRadius && modeBtnRoute && panelRadius && panelRoute) {
         if (radiusCircle && leafletMap) leafletMap.removeLayer(radiusCircle);
         if (radiusMarker && leafletMap) leafletMap.removeLayer(radiusMarker);
         renderRouteMarkers();
+        if (routePinA && routePinB) {
+            calculateAndDrawRoute();
+        }
     });
 }
 
-// ==================== THEME MANAGEMENT ====================
-const applyTheme = (theme) => {
-    const isDark = theme === 'dark';
-    if (isDark) {
-        document.documentElement.classList.add('dark');
-        if (themeIcon) {
-            themeIcon.setAttribute('data-lucide', 'sun');
-            if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Light Mode');
-        }
-    } else {
-        document.documentElement.classList.remove('dark');
-        if (themeIcon) {
-            themeIcon.setAttribute('data-lucide', 'moon');
-            if (themeToggleBtn) themeToggleBtn.setAttribute('title', 'Switch to Dark / AMOLED Mode');
-        }
-    }
-    localStorage.setItem('theme', theme);
-    if (window.lucide) lucide.createIcons();
-    
-    const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-    const profileRecords = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-    if (profileRecords.length > 0) {
-        updateChart(processRecords(profileRecords));
-    }
-
-    updateMapTileLayer(isDark);
-};
-
-if (themeToggleBtn) {
-    themeToggleBtn.addEventListener('click', () => {
-        const isCurrentlyDark = document.documentElement.classList.contains('dark');
-        applyTheme(isCurrentlyDark ? 'light' : 'dark');
-    });
-}
-
-// ==================== NAVIGATION TABS ====================
-const setTabActive = (activeTab, inactiveTabs, activeView, inactiveViews) => {
-    activeTab.classList.replace('border-transparent', 'border-blue-600');
-    activeTab.classList.replace('text-gray-500', 'text-blue-600');
-    activeTab.classList.replace('dark:text-slate-400', 'dark:text-blue-400');
-    activeTab.classList.add('font-semibold');
-
-    inactiveTabs.forEach(tab => {
-        tab.classList.replace('border-blue-600', 'border-transparent');
-        tab.classList.replace('text-blue-600', 'text-gray-500');
-        tab.classList.replace('dark:text-blue-400', 'dark:text-slate-400');
-        tab.classList.remove('font-semibold');
-    });
-
-    activeView.classList.remove('hidden');
-    inactiveViews.forEach(v => v.classList.add('hidden'));
-};
-
+// 3-Tab View Switching
 if (tabFuel && tabMaintenance && tabMap && viewFuel && viewMaintenance && viewMap) {
     tabFuel.addEventListener('click', () => {
-        setTabActive(tabFuel, [tabMaintenance, tabMap], viewFuel, [viewMaintenance, viewMap]);
+        tabFuel.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-blue-600 dark:border-blue-500 text-blue-600 dark:text-blue-400 font-semibold text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+        tabMaintenance.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:border-gray-300 dark:hover:border-slate-700 font-medium text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+        tabMap.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:border-gray-300 dark:hover:border-slate-700 font-medium text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+
+        viewFuel.classList.remove('hidden');
+        viewMaintenance.classList.add('hidden');
+        viewMap.classList.add('hidden');
     });
 
     tabMaintenance.addEventListener('click', () => {
-        setTabActive(tabMaintenance, [tabFuel, tabMap], viewMaintenance, [viewFuel, viewMap]);
-        renderServiceReminders();
+        tabMaintenance.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-orange-600 dark:border-orange-500 text-orange-600 dark:text-orange-400 font-semibold text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+        tabFuel.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:border-gray-300 dark:hover:border-slate-700 font-medium text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+        tabMap.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:border-gray-300 dark:hover:border-slate-700 font-medium text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+
+        viewMaintenance.classList.remove('hidden');
+        viewFuel.classList.add('hidden');
+        viewMap.classList.add('hidden');
     });
 
     tabMap.addEventListener('click', () => {
-        setTabActive(tabMap, [tabFuel, tabMaintenance], viewMap, [viewFuel, viewMaintenance]);
-        initMap();
+        tabMap.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-blue-600 dark:border-blue-500 text-blue-600 dark:text-blue-400 font-semibold text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+        tabFuel.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:border-gray-300 dark:hover:border-slate-700 font-medium text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+        tabMaintenance.className = 'py-2.5 px-4 sm:px-5 border-b-2 border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:border-gray-300 dark:hover:border-slate-700 font-medium text-sm focus:outline-none transition-colors flex items-center whitespace-nowrap';
+
+        viewMap.classList.remove('hidden');
+        viewFuel.classList.add('hidden');
+        viewMaintenance.classList.add('hidden');
+
         setTimeout(() => {
+            initMap();
             if (leafletMap) {
                 leafletMap.invalidateSize();
-                if (currentMapMode === 'radius' && radiusCircle) {
-                    leafletMap.fitBounds(radiusCircle.getBounds(), { padding: [30, 30] });
-                }
             }
-        }, 200);
+        }, 100);
     });
 }
 
-// Profile Select
+// Profile Switcher
 if (profileSelect) {
     profileSelect.addEventListener('change', (e) => {
-        activeProfile = e.target.value;
+        let val = e.target.value;
+        if (val === 'Cherry') val = 'Chery';
+        activeProfile = val;
         localStorage.setItem('activeProfile', activeProfile);
+        
         if (navbarVehicleLogo) {
             navbarVehicleLogo.innerHTML = getVehicleLogo(activeProfile, 'h-4 w-4');
         }
+
         renderTable();
         renderMaintenanceTable();
-        renderServiceReminders();
+        renderTripsTable();
         updateOdometerHints();
-        calculateFormTotal();
+        renderServiceReminders();
         updateMapPanelDefaults();
     });
 }
 
-// Add Profile
 if (addProfileBtn) {
     addProfileBtn.addEventListener('click', () => {
-        const newProfile = prompt('Enter new vehicle name (e.g. Chery Tiggo 8 Pro, Honda Click, Yamaha NMAX, Toyota Vios):');
-        if (newProfile && newProfile.trim() !== '') {
-            let trimmed = newProfile.trim();
-            if (trimmed.toLowerCase() === 'cherry') trimmed = 'Chery';
-            if (!profiles.includes(trimmed)) {
-                profiles.push(trimmed);
+        const newProfile = prompt("Enter new vehicle name (e.g. ADV 150, Chery Tiggo 8, NMAX, Vios):");
+        if (newProfile && newProfile.trim()) {
+            let cleanProfile = newProfile.trim();
+            if (cleanProfile.toLowerCase() === 'cherry') cleanProfile = 'Chery';
+            
+            if (!profiles.includes(cleanProfile)) {
+                profiles.push(cleanProfile);
                 localStorage.setItem('fuelProfiles', JSON.stringify(profiles));
             }
-            activeProfile = trimmed;
+            activeProfile = cleanProfile;
             localStorage.setItem('activeProfile', activeProfile);
             renderProfiles();
             renderTable();
             renderMaintenanceTable();
-            renderServiceReminders();
+            renderTripsTable();
             updateOdometerHints();
-            calculateFormTotal();
+            renderServiceReminders();
             updateMapPanelDefaults();
         }
     });
 }
 
-// Fuel Form Submit
+// ==================== FUEL RECORD SUBMISSIONS ====================
 if (form) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-
+        
         const originalBtnText = submitBtn.textContent;
         submitBtn.disabled = true;
         submitBtn.textContent = editingId ? 'Updating...' : 'Saving...';
@@ -1974,7 +2257,6 @@ if (form) {
     });
 }
 
-// Cancel Fuel Edit
 if (cancelEditBtn) {
     cancelEditBtn.addEventListener('click', () => {
         editingId = null;
@@ -1989,7 +2271,6 @@ if (cancelEditBtn) {
     });
 }
 
-// Window Global Action Handlers
 window.editRecord = (id) => {
     const record = records.find(r => r.id === id);
     if (!record) return;
@@ -2017,7 +2298,7 @@ window.deleteRecord = async (id) => {
     }
 };
 
-// Maintenance Form Submit
+// ==================== MAINTENANCE RECORD SUBMISSIONS ====================
 if (maintForm) {
     maintForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -2132,6 +2413,11 @@ if (clearDataBtn) {
                     batch.delete(doc(db, "maintRecords", r.id));
                 });
 
+                const profileTrips = tripRecords.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
+                profileTrips.forEach(r => {
+                    batch.delete(doc(db, "tripRecords", r.id));
+                });
+
                 await batch.commit();
             } catch (err) {
                 alert("Failed to clear data: " + err.message);
@@ -2154,6 +2440,12 @@ onSnapshot(collection(db, "maintRecords"), (snapshot) => {
     syncProfilesFromRecords();
     renderMaintenanceTable();
     renderServiceReminders();
+});
+
+onSnapshot(collection(db, "tripRecords"), (snapshot) => {
+    tripRecords = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    syncProfilesFromRecords();
+    renderTripsTable();
 });
 
 // ==================== INITIAL BOOTUP ====================

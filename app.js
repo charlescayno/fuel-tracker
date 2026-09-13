@@ -50,6 +50,8 @@ let maintRecords = [];
 let editingId = null;
 let editingMaintId = null;
 let chartInstance = null;
+let selectedFuelIds = new Set();
+let selectedMaintIds = new Set();
 
 // Leaflet Map Global State
 let leafletMap = null;
@@ -98,7 +100,16 @@ const clearDataBtn = document.getElementById('clear-data-btn');
 const profileSelect = document.getElementById('profile-select');
 const addProfileBtn = document.getElementById('add-profile-btn');
 const cancelEditBtn = document.getElementById('cancel-edit-btn');
+const deleteEditBtn = document.getElementById('delete-edit-btn');
 const submitBtn = document.getElementById('submit-btn');
+
+// Fuel Bulk Delete Elements
+const fuelBulkActionsBar = document.getElementById('fuel-bulk-actions-bar');
+const fuelSelectedCount = document.getElementById('fuel-selected-count');
+const fuelSelectedCountBadge = document.getElementById('fuel-selected-count-badge');
+const fuelSelectAll = document.getElementById('fuel-select-all');
+const fuelDeselectAllBtn = document.getElementById('fuel-deselect-all-btn');
+const fuelBulkDeleteBtn = document.getElementById('fuel-bulk-delete-btn');
 
 // Hints
 const lastOdoHint = document.getElementById('last-odo-hint');
@@ -145,8 +156,26 @@ const maintCostInput = document.getElementById('maint-cost');
 const maintNotesInput = document.getElementById('maint-notes');
 const maintSubmitBtn = document.getElementById('maint-submit-btn');
 const maintCancelEditBtn = document.getElementById('maint-cancel-edit-btn');
+const maintDeleteEditBtn = document.getElementById('maint-delete-edit-btn');
 const maintTableBody = document.getElementById('maint-table-body');
 const maintEmptyState = document.getElementById('maint-empty-state');
+const clearMaintDataBtn = document.getElementById('clear-maint-data-btn');
+
+// Maintenance Bulk Delete Elements
+const maintBulkActionsBar = document.getElementById('maint-bulk-actions-bar');
+const maintSelectedCount = document.getElementById('maint-selected-count');
+const maintSelectedCountBadge = document.getElementById('maint-selected-count-badge');
+const maintSelectAll = document.getElementById('maint-select-all');
+const maintDeselectAllBtn = document.getElementById('maint-deselect-all-btn');
+const maintBulkDeleteBtn = document.getElementById('maint-bulk-delete-btn');
+
+// Delete Confirmation Modal Elements
+const deleteModal = document.getElementById('delete-modal');
+const deleteModalTitle = document.getElementById('delete-modal-title');
+const deleteModalDesc = document.getElementById('delete-modal-desc');
+const deleteModalPreview = document.getElementById('delete-modal-preview');
+const deleteModalCancelBtn = document.getElementById('delete-modal-cancel-btn');
+const deleteModalConfirmBtn = document.getElementById('delete-modal-confirm-btn');
 
 // Service Reminders
 const serviceRemindersGrid = document.getElementById('service-reminders-grid');
@@ -207,6 +236,120 @@ const formatCurrency = (amount) => {
 const formatNumber = (num, decimals = 2) => {
     if (num === null || num === undefined || isNaN(num)) return '-';
     return Number(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+};
+
+// ==================== DELETE CONFIRMATION MODAL & BULK CONTROLLERS ====================
+let deleteModalAction = null;
+
+const openDeleteModal = ({ title, description, previewHtml, confirmText, onConfirm }) => {
+    if (!deleteModal) {
+        if (confirm(description || 'Are you sure you want to delete this record?')) {
+            onConfirm();
+        }
+        return;
+    }
+
+    if (deleteModalTitle) deleteModalTitle.textContent = title || 'Delete Log?';
+    if (deleteModalDesc) deleteModalDesc.textContent = description || 'Are you sure you want to delete this previous record? This action cannot be undone.';
+    if (deleteModalPreview) {
+        if (previewHtml) {
+            deleteModalPreview.innerHTML = previewHtml;
+            deleteModalPreview.classList.remove('hidden');
+        } else {
+            deleteModalPreview.classList.add('hidden');
+        }
+    }
+    if (deleteModalConfirmBtn) {
+        deleteModalConfirmBtn.innerHTML = `<i data-lucide="trash-2" class="h-4 w-4 mr-1.5"></i> ${confirmText || 'Delete Record'}`;
+    }
+
+    deleteModalAction = onConfirm;
+    deleteModal.classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+};
+
+const closeDeleteModal = () => {
+    if (deleteModal) deleteModal.classList.add('hidden');
+    deleteModalAction = null;
+};
+
+if (deleteModalCancelBtn) {
+    deleteModalCancelBtn.addEventListener('click', closeDeleteModal);
+}
+
+if (deleteModalConfirmBtn) {
+    deleteModalConfirmBtn.addEventListener('click', async () => {
+        if (typeof deleteModalAction === 'function') {
+            const action = deleteModalAction;
+            closeDeleteModal();
+            await action();
+        } else {
+            closeDeleteModal();
+        }
+    });
+}
+
+if (deleteModal) {
+    deleteModal.addEventListener('click', (e) => {
+        if (e.target === deleteModal) {
+            closeDeleteModal();
+        }
+    });
+}
+
+// Bulk Bars Updaters
+const updateFuelBulkBar = () => {
+    if (!fuelBulkActionsBar) return;
+    const count = selectedFuelIds.size;
+    if (count > 0) {
+        fuelBulkActionsBar.classList.remove('hidden');
+        if (fuelSelectedCount) fuelSelectedCount.textContent = `${count} ${count === 1 ? 'log' : 'logs'} selected`;
+        if (fuelSelectedCountBadge) fuelSelectedCountBadge.textContent = count;
+    } else {
+        fuelBulkActionsBar.classList.add('hidden');
+    }
+    if (fuelSelectAll) {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const totalRows = records.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'))).length;
+        fuelSelectAll.checked = totalRows > 0 && count === totalRows;
+        fuelSelectAll.indeterminate = count > 0 && count < totalRows;
+    }
+};
+
+const updateMaintBulkBar = () => {
+    if (!maintBulkActionsBar) return;
+    const count = selectedMaintIds.size;
+    if (count > 0) {
+        maintBulkActionsBar.classList.remove('hidden');
+        if (maintSelectedCount) maintSelectedCount.textContent = `${count} ${count === 1 ? 'log' : 'logs'} selected`;
+        if (maintSelectedCountBadge) maintSelectedCountBadge.textContent = count;
+    } else {
+        maintBulkActionsBar.classList.add('hidden');
+    }
+    if (maintSelectAll) {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const totalRows = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'))).length;
+        maintSelectAll.checked = totalRows > 0 && count === totalRows;
+        maintSelectAll.indeterminate = count > 0 && count < totalRows;
+    }
+};
+
+window.toggleFuelRowSelection = (id, isChecked) => {
+    if (isChecked) {
+        selectedFuelIds.add(id);
+    } else {
+        selectedFuelIds.delete(id);
+    }
+    updateFuelBulkBar();
+};
+
+window.toggleMaintRowSelection = (id, isChecked) => {
+    if (isChecked) {
+        selectedMaintIds.add(id);
+    } else {
+        selectedMaintIds.delete(id);
+    }
+    updateMaintBulkBar();
 };
 
 // ==================== VEHICLE LOGOS ====================
@@ -933,6 +1076,9 @@ const renderTable = () => {
         const rangeAddedStr = rangeAddedVal ? `+${formatNumber(rangeAddedVal, 0)} km` : '';
 
         tr.innerHTML = `
+            <td class="px-3.5 py-4 text-center">
+                <input type="checkbox" onchange="toggleFuelRowSelection('${row.id}', this.checked)" class="fuel-row-check rounded border-gray-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer" data-id="${row.id}" ${selectedFuelIds.has(row.id) ? 'checked' : ''}>
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 dark:text-slate-400">${row.tripKm !== null ? row.tripKm : '-'}</td>
@@ -953,11 +1099,11 @@ const renderTable = () => {
                 <div class="text-amber-900 dark:text-amber-300 font-bold">${row.pesosIn30Days !== null ? formatCurrency(row.pesosIn30Days) : '-'}</div>
                 <div class="text-[11px] text-gray-500 dark:text-slate-400 font-medium">${row.litersIn30Days !== null ? formatNumber(row.litersIn30Days) + ' L' : ''}</div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit">
+            <td class="sticky right-0 bg-white dark:bg-slate-900 px-4 py-4 whitespace-nowrap text-right text-sm font-medium shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.4)]">
+                <button onclick="editRecord('${row.id}')" class="text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300 p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors mr-1" title="Edit Log">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
-                <button onclick="deleteRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
+                <button onclick="deleteRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete Log">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
@@ -966,6 +1112,7 @@ const renderTable = () => {
     });
 
     if (window.lucide) lucide.createIcons();
+    updateFuelBulkBar();
     updateStats(processedData);
     updateChart(processedData);
     updateOdometerHints();
@@ -999,16 +1146,19 @@ const renderMaintenanceTable = () => {
         const formattedDate = dateObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 
         tr.innerHTML = `
+            <td class="px-3.5 py-4 text-center">
+                <input type="checkbox" onchange="toggleMaintRowSelection('${row.id}', this.checked)" class="maint-row-check rounded border-gray-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500 cursor-pointer" data-id="${row.id}" ${selectedMaintIds.has(row.id) ? 'checked' : ''}>
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-slate-100">${formattedDate}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-yellow-600 dark:text-yellow-400 font-bold bg-yellow-50 dark:bg-yellow-950/25">${row.odometer}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-slate-100 font-medium">${row.type}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">${row.notes || '-'}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-orange-700 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-950/20">${formatCurrency(row.cost)}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editMaintRecord('${row.id}')" class="text-orange-600 dark:text-orange-400 hover:text-orange-900 dark:hover:text-orange-300 p-1 rounded-md hover:bg-orange-50 dark:hover:bg-orange-950/50 transition-colors mr-1" title="Edit">
+            <td class="sticky right-0 bg-white dark:bg-slate-900 px-4 py-4 whitespace-nowrap text-right text-sm font-medium shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.4)]">
+                <button onclick="editMaintRecord('${row.id}')" class="text-orange-600 dark:text-orange-400 hover:text-orange-900 dark:hover:text-orange-300 p-1.5 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/50 transition-colors mr-1" title="Edit Log">
                     <i data-lucide="edit-2" class="h-4 w-4"></i>
                 </button>
-                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete">
+                <button onclick="deleteMaintRecord('${row.id}')" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors" title="Delete Log">
                     <i data-lucide="trash-2" class="h-4 w-4"></i>
                 </button>
             </td>
@@ -1017,6 +1167,7 @@ const renderMaintenanceTable = () => {
     });
 
     if (window.lucide) lucide.createIcons();
+    updateMaintBulkBar();
     updateOdometerHints();
     renderServiceReminders();
 };
@@ -1814,6 +1965,9 @@ if (profileSelect) {
         activeProfile = val;
         localStorage.setItem('activeProfile', activeProfile);
         
+        selectedFuelIds.clear();
+        selectedMaintIds.clear();
+
         if (navbarVehicleLogo) {
             navbarVehicleLogo.innerHTML = getVehicleLogo(activeProfile, 'h-4 w-4');
         }
@@ -1912,7 +2066,16 @@ if (cancelEditBtn) {
         if (calculatedCostPerKm) calculatedCostPerKm.textContent = '₱0.00/km';
         submitBtn.textContent = 'Save Record';
         cancelEditBtn.classList.add('hidden');
+        if (deleteEditBtn) deleteEditBtn.classList.add('hidden');
         updateLitersPercentHint();
+    });
+}
+
+if (deleteEditBtn) {
+    deleteEditBtn.addEventListener('click', () => {
+        if (editingId) {
+            window.deleteRecord(editingId);
+        }
     });
 }
 
@@ -1929,19 +2092,101 @@ window.editRecord = (id) => {
     
     submitBtn.textContent = 'Update Record';
     cancelEditBtn.classList.remove('hidden');
+    if (deleteEditBtn) deleteEditBtn.classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
     
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
-window.deleteRecord = async (id) => {
-    if (confirm('Are you sure you want to delete this record?')) {
-        try {
-            await deleteDoc(doc(db, "fuelRecords", id));
-        } catch (err) {
-            alert('Failed to delete record: ' + err.message);
+window.deleteRecord = (id) => {
+    const record = records.find(r => r.id === id);
+    if (!record) return;
+
+    const dateStr = new Date(record.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const amountStr = formatCurrency(record.liters * record.pricePerLiter);
+    const preview = `
+        <div class="space-y-1">
+            <div class="font-bold text-gray-900 dark:text-white">${dateStr}</div>
+            <div class="text-gray-600 dark:text-slate-400">Odometer: <strong class="text-yellow-600 dark:text-yellow-400">${record.odometer} km</strong> • Fuel: <strong>${record.liters} L</strong> (${amountStr})</div>
+            <div class="text-blue-600 dark:text-blue-400 font-semibold text-[11px]">Vehicle: ${record.profile || activeProfile}</div>
+        </div>
+    `;
+
+    openDeleteModal({
+        title: 'Delete Fuel Log?',
+        description: 'Are you sure you want to delete this previous fuel record? Calculated averages and trip figures will update automatically.',
+        previewHtml: preview,
+        confirmText: 'Delete Record',
+        onConfirm: async () => {
+            try {
+                await deleteDoc(doc(db, "fuelRecords", id));
+                selectedFuelIds.delete(id);
+                updateFuelBulkBar();
+                if (editingId === id && cancelEditBtn) {
+                    cancelEditBtn.click();
+                }
+            } catch (err) {
+                console.error("Failed to delete fuel record:", err);
+                alert('Failed to delete record: ' + err.message);
+            }
         }
-    }
+    });
 };
+
+// Fuel Bulk Delete Handlers
+if (fuelBulkDeleteBtn) {
+    fuelBulkDeleteBtn.addEventListener('click', () => {
+        const count = selectedFuelIds.size;
+        if (count === 0) return;
+
+        openDeleteModal({
+            title: `Delete ${count} Fuel ${count === 1 ? 'Log' : 'Logs'}?`,
+            description: `Are you sure you want to permanently delete the ${count} selected fuel records? This action cannot be undone.`,
+            previewHtml: `<div class="font-semibold text-red-600 dark:text-red-400">${count} logs will be removed from your vehicle history.</div>`,
+            confirmText: `Delete ${count} ${count === 1 ? 'Log' : 'Logs'}`,
+            onConfirm: async () => {
+                try {
+                    const batch = writeBatch(db);
+                    selectedFuelIds.forEach(id => {
+                        batch.delete(doc(db, "fuelRecords", id));
+                    });
+                    await batch.commit();
+                    selectedFuelIds.clear();
+                    updateFuelBulkBar();
+                } catch (err) {
+                    console.error("Bulk delete fuel error:", err);
+                    alert("Failed to delete selected logs: " + err.message);
+                }
+            }
+        });
+    });
+}
+
+if (fuelSelectAll) {
+    fuelSelectAll.addEventListener('change', (e) => {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const profileFuel = records.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+        if (e.target.checked) {
+            profileFuel.forEach(r => selectedFuelIds.add(r.id));
+        } else {
+            selectedFuelIds.clear();
+        }
+        document.querySelectorAll('.fuel-row-check').forEach(cb => {
+            cb.checked = e.target.checked;
+        });
+        updateFuelBulkBar();
+    });
+}
+
+if (fuelDeselectAllBtn) {
+    fuelDeselectAllBtn.addEventListener('click', () => {
+        selectedFuelIds.clear();
+        document.querySelectorAll('.fuel-row-check').forEach(cb => {
+            cb.checked = false;
+        });
+        updateFuelBulkBar();
+    });
+}
 
 // ==================== MAINTENANCE RECORD SUBMISSIONS ====================
 if (maintForm) {
@@ -1970,6 +2215,7 @@ if (maintForm) {
                 editingMaintId = null;
                 if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Log Maintenance';
                 if (maintCancelEditBtn) maintCancelEditBtn.classList.add('hidden');
+                if (maintDeleteEditBtn) maintDeleteEditBtn.classList.add('hidden');
             } else {
                 await addDoc(collection(db, "maintRecords"), recordData);
             }
@@ -2013,6 +2259,7 @@ window.editMaintRecord = (id) => {
     if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="edit" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Edit Maintenance';
     if (maintSubmitBtn) maintSubmitBtn.textContent = 'Update Record';
     if (maintCancelEditBtn) maintCancelEditBtn.classList.remove('hidden');
+    if (maintDeleteEditBtn) maintDeleteEditBtn.classList.remove('hidden');
 
     if (window.lucide) lucide.createIcons();
     maintForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -2026,43 +2273,173 @@ if (maintCancelEditBtn) {
         if (maintFormTitle) maintFormTitle.innerHTML = '<i data-lucide="wrench" class="h-5 w-5 mr-2 text-orange-600 dark:text-orange-400"></i> Log Maintenance';
         if (maintSubmitBtn) maintSubmitBtn.textContent = 'Save Record';
         maintCancelEditBtn.classList.add('hidden');
+        if (maintDeleteEditBtn) maintDeleteEditBtn.classList.add('hidden');
         if (window.lucide) lucide.createIcons();
     });
 }
 
-window.deleteMaintRecord = async (id) => {
-    if (confirm('Are you sure you want to delete this maintenance record?')) {
-        try {
-            await deleteDoc(doc(db, "maintRecords", id));
-        } catch (err) {
-            alert('Failed to delete maintenance record: ' + err.message);
+if (maintDeleteEditBtn) {
+    maintDeleteEditBtn.addEventListener('click', () => {
+        if (editingMaintId) {
+            window.deleteMaintRecord(editingMaintId);
         }
-    }
-};
+    });
+}
 
-// Clear All Data
-if (clearDataBtn) {
-    clearDataBtn.addEventListener('click', async () => {
-        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
-        if (confirm(`Are you sure you want to delete ALL records for ${currentProfileName}? This cannot be undone.`)) {
+window.deleteMaintRecord = (id) => {
+    const record = maintRecords.find(r => r.id === id);
+    if (!record) return;
+
+    const dateStr = new Date(record.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    const costStr = formatCurrency(record.cost);
+    const preview = `
+        <div class="space-y-1">
+            <div class="font-bold text-gray-900 dark:text-white">${dateStr} • ${record.type}</div>
+            <div class="text-gray-600 dark:text-slate-400">Odometer: <strong class="text-yellow-600 dark:text-yellow-400">${record.odometer} km</strong> • Cost: <strong class="text-orange-600 dark:text-orange-400">${costStr}</strong></div>
+            ${record.notes ? `<div class="text-xs text-gray-500 dark:text-slate-400 italic">"${record.notes}"</div>` : ''}
+            <div class="text-blue-600 dark:text-blue-400 font-semibold text-[11px]">Vehicle: ${record.profile || activeProfile}</div>
+        </div>
+    `;
+
+    openDeleteModal({
+        title: 'Delete Service Log?',
+        description: 'Are you sure you want to delete this maintenance record? Service reminders and running costs will update automatically.',
+        previewHtml: preview,
+        confirmText: 'Delete Record',
+        onConfirm: async () => {
             try {
-                const batch = writeBatch(db);
-                
-                const profileFuel = records.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-                profileFuel.forEach(r => {
-                    batch.delete(doc(db, "fuelRecords", r.id));
-                });
-
-                const profileMaint = maintRecords.filter(r => r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry'));
-                profileMaint.forEach(r => {
-                    batch.delete(doc(db, "maintRecords", r.id));
-                });
-
-                await batch.commit();
+                await deleteDoc(doc(db, "maintRecords", id));
+                selectedMaintIds.delete(id);
+                updateMaintBulkBar();
+                if (editingMaintId === id && maintCancelEditBtn) {
+                    maintCancelEditBtn.click();
+                }
             } catch (err) {
-                alert("Failed to clear data: " + err.message);
+                console.error("Failed to delete maintenance record:", err);
+                alert('Failed to delete maintenance record: ' + err.message);
             }
         }
+    });
+};
+
+// Maintenance Bulk Delete Handlers
+if (maintBulkDeleteBtn) {
+    maintBulkDeleteBtn.addEventListener('click', () => {
+        const count = selectedMaintIds.size;
+        if (count === 0) return;
+
+        openDeleteModal({
+            title: `Delete ${count} Service ${count === 1 ? 'Log' : 'Logs'}?`,
+            description: `Are you sure you want to permanently delete the ${count} selected maintenance records? This action cannot be undone.`,
+            previewHtml: `<div class="font-semibold text-red-600 dark:text-red-400">${count} service records will be removed.</div>`,
+            confirmText: `Delete ${count} ${count === 1 ? 'Log' : 'Logs'}`,
+            onConfirm: async () => {
+                try {
+                    const batch = writeBatch(db);
+                    selectedMaintIds.forEach(id => {
+                        batch.delete(doc(db, "maintRecords", id));
+                    });
+                    await batch.commit();
+                    selectedMaintIds.clear();
+                    updateMaintBulkBar();
+                } catch (err) {
+                    console.error("Bulk delete maintenance error:", err);
+                    alert("Failed to delete selected logs: " + err.message);
+                }
+            }
+        });
+    });
+}
+
+if (maintSelectAll) {
+    maintSelectAll.addEventListener('change', (e) => {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+        if (e.target.checked) {
+            profileMaint.forEach(r => selectedMaintIds.add(r.id));
+        } else {
+            selectedMaintIds.clear();
+        }
+        document.querySelectorAll('.maint-row-check').forEach(cb => {
+            cb.checked = e.target.checked;
+        });
+        updateMaintBulkBar();
+    });
+}
+
+if (maintDeselectAllBtn) {
+    maintDeselectAllBtn.addEventListener('click', () => {
+        selectedMaintIds.clear();
+        document.querySelectorAll('.maint-row-check').forEach(cb => {
+            cb.checked = false;
+        });
+        updateMaintBulkBar();
+    });
+}
+
+// Clear All Maintenance Data
+if (clearMaintDataBtn) {
+    clearMaintDataBtn.addEventListener('click', () => {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const profileMaint = maintRecords.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+        if (profileMaint.length === 0) {
+            alert('No maintenance records to clear.');
+            return;
+        }
+
+        openDeleteModal({
+            title: `Clear All Maintenance for ${currentProfileName}?`,
+            description: `Are you sure you want to delete all ${profileMaint.length} service records for ${currentProfileName}? This cannot be undone.`,
+            previewHtml: `<div class="font-bold text-red-600 dark:text-red-400">All ${profileMaint.length} maintenance logs for ${currentProfileName} will be permanently removed.</div>`,
+            confirmText: 'Clear All Maintenance',
+            onConfirm: async () => {
+                try {
+                    const batch = writeBatch(db);
+                    profileMaint.forEach(r => {
+                        batch.delete(doc(db, "maintRecords", r.id));
+                    });
+                    await batch.commit();
+                    selectedMaintIds.clear();
+                    updateMaintBulkBar();
+                } catch (err) {
+                    console.error("Clear maintenance data error:", err);
+                    alert("Failed to clear data: " + err.message);
+                }
+            }
+        });
+    });
+}
+
+// Clear All Fuel & Vehicle Data
+if (clearDataBtn) {
+    clearDataBtn.addEventListener('click', () => {
+        const currentProfileName = activeProfile === 'Cherry' ? 'Chery' : activeProfile;
+        const profileFuel = records.filter(r => (r.profile === currentProfileName || (currentProfileName === 'Chery' && r.profile === 'Cherry')));
+        if (profileFuel.length === 0) {
+            alert('No fuel records to clear.');
+            return;
+        }
+
+        openDeleteModal({
+            title: `Clear All Fuel Logs for ${currentProfileName}?`,
+            description: `Are you sure you want to delete all ${profileFuel.length} fuel logs for ${currentProfileName}? This action cannot be undone.`,
+            previewHtml: `<div class="font-bold text-red-600 dark:text-red-400">All ${profileFuel.length} fuel records for ${currentProfileName} will be wiped.</div>`,
+            confirmText: 'Clear All Logs',
+            onConfirm: async () => {
+                try {
+                    const batch = writeBatch(db);
+                    profileFuel.forEach(r => {
+                        batch.delete(doc(db, "fuelRecords", r.id));
+                    });
+                    await batch.commit();
+                    selectedFuelIds.clear();
+                    updateFuelBulkBar();
+                } catch (err) {
+                    console.error("Failed to clear data:", err);
+                    alert("Failed to clear data: " + err.message);
+                }
+            }
+        });
     });
 }
 

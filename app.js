@@ -1,7 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { 
     getFirestore, 
-    enableIndexedDbPersistence,
+    initializeFirestore,
+    persistentLocalCache,
+    persistentMultipleTabManager,
     collection, 
     onSnapshot, 
     addDoc, 
@@ -22,16 +24,19 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 
-// Enable Firestore Offline Persistence
-enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-        console.warn('Firestore persistence warning: Multiple tabs open.');
-    } else if (err.code === 'unimplemented') {
-        console.warn('Firestore persistence is not supported in this browser.');
-    }
-});
+// Initialize Firestore with robust multi-tab offline caching
+let db;
+try {
+    db = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+        })
+    });
+} catch (e) {
+    console.warn("Falling back to standard Firestore getFirestore:", e);
+    db = getFirestore(app);
+}
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
@@ -176,6 +181,119 @@ const deleteModalDesc = document.getElementById('delete-modal-desc');
 const deleteModalPreview = document.getElementById('delete-modal-preview');
 const deleteModalCancelBtn = document.getElementById('delete-modal-cancel-btn');
 const deleteModalConfirmBtn = document.getElementById('delete-modal-confirm-btn');
+
+// Firebase Diagnostics & Connection Status Elements
+const networkStatusBtn = document.getElementById('network-status');
+const networkStatusText = document.getElementById('network-status-text');
+const firebaseModal = document.getElementById('firebase-modal');
+const firebaseModalCloseBtn = document.getElementById('firebase-modal-close-btn');
+const firebaseModalDoneBtn = document.getElementById('firebase-modal-done-btn');
+const firebaseDiagStatus = document.getElementById('firebase-diag-status');
+const diagActiveProfile = document.getElementById('diag-active-profile');
+const diagListeners = document.getElementById('diag-listeners');
+const firebaseTestPingBtn = document.getElementById('firebase-test-ping-btn');
+const firebaseTestResult = document.getElementById('firebase-test-result');
+const firebaseCopyRulesBtn = document.getElementById('firebase-copy-rules-btn');
+
+let currentCloudState = 'online';
+
+const updateCloudStatus = (state, message = '') => {
+    currentCloudState = state;
+    if (!networkStatusBtn) return;
+    
+    if (state === 'online') {
+        networkStatusBtn.className = 'flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5 hover:underline focus:outline-none transition-colors cursor-pointer';
+        networkStatusBtn.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> <span id="network-status-text">Cloud Synced</span>';
+        if (firebaseDiagStatus) {
+            firebaseDiagStatus.className = 'inline-flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold';
+            firebaseDiagStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span> Connected';
+        }
+    } else if (state === 'offline') {
+        networkStatusBtn.className = 'flex items-center text-[10px] font-medium text-amber-600 dark:text-amber-400 mt-0.5 hover:underline focus:outline-none transition-colors cursor-pointer';
+        networkStatusBtn.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span> <span id="network-status-text">Offline (Local Cache)</span>';
+        if (firebaseDiagStatus) {
+            firebaseDiagStatus.className = 'inline-flex items-center text-xs text-amber-600 dark:text-amber-400 font-bold';
+            firebaseDiagStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500 mr-1.5"></span> Offline (Cached)';
+        }
+    } else if (state === 'error') {
+        networkStatusBtn.className = 'flex items-center text-[10px] font-medium text-red-600 dark:text-red-400 mt-0.5 hover:underline focus:outline-none transition-colors cursor-pointer animate-pulse';
+        networkStatusBtn.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-red-500 mr-1"></span> <span id="network-status-text">Firebase Issue (Click)</span>';
+        if (firebaseDiagStatus) {
+            firebaseDiagStatus.className = 'inline-flex items-center text-xs text-red-600 dark:text-red-400 font-bold';
+            firebaseDiagStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 mr-1.5"></span> Error: ${message || 'Connection Blocked'}`;
+        }
+    }
+};
+
+window.addEventListener('online', () => updateCloudStatus('online'));
+window.addEventListener('offline', () => updateCloudStatus('offline'));
+
+const openFirebaseModal = () => {
+    if (!firebaseModal) return;
+    if (diagActiveProfile) diagActiveProfile.textContent = activeProfile;
+    if (firebaseTestResult) firebaseTestResult.classList.add('hidden');
+    firebaseModal.classList.remove('hidden');
+    if (window.lucide) lucide.createIcons();
+};
+
+const closeFirebaseModal = () => {
+    if (firebaseModal) firebaseModal.classList.add('hidden');
+};
+
+if (networkStatusBtn) {
+    networkStatusBtn.addEventListener('click', openFirebaseModal);
+}
+if (firebaseModalCloseBtn) {
+    firebaseModalCloseBtn.addEventListener('click', closeFirebaseModal);
+}
+if (firebaseModalDoneBtn) {
+    firebaseModalDoneBtn.addEventListener('click', closeFirebaseModal);
+}
+
+if (firebaseCopyRulesBtn) {
+    firebaseCopyRulesBtn.addEventListener('click', () => {
+        const rules = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+        navigator.clipboard.writeText(rules).then(() => {
+            firebaseCopyRulesBtn.innerHTML = '<i data-lucide="check" class="h-3 w-3 mr-1 text-emerald-400"></i> Copied!';
+            if (window.lucide) lucide.createIcons();
+            setTimeout(() => {
+                firebaseCopyRulesBtn.innerHTML = '<i data-lucide="copy" class="h-3 w-3 mr-1"></i> Copy';
+                if (window.lucide) lucide.createIcons();
+            }, 2000);
+        });
+    });
+}
+
+if (firebaseTestPingBtn) {
+    firebaseTestPingBtn.addEventListener('click', async () => {
+        if (!firebaseTestResult) return;
+        firebaseTestPingBtn.disabled = true;
+        firebaseTestPingBtn.innerHTML = '<i data-lucide="loader-2" class="h-3.5 w-3.5 mr-1.5 animate-spin"></i> Testing Cloud Connection...';
+        if (window.lucide) lucide.createIcons();
+
+        const startTime = Date.now();
+        try {
+            const testRef = await addDoc(collection(db, "_pingTest"), { ping: Date.now() });
+            await deleteDoc(testRef);
+            const latency = Date.now() - startTime;
+            
+            firebaseTestResult.className = 'mt-2 p-2.5 rounded-lg text-[11px] font-mono leading-tight bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
+            firebaseTestResult.innerHTML = `<strong>SUCCESS:</strong> Cloud Read & Write OK (${latency}ms round-trip). Firebase is fully functional!`;
+            firebaseTestResult.classList.remove('hidden');
+            updateCloudStatus('online');
+        } catch (err) {
+            console.error("Firebase ping test failed:", err);
+            firebaseTestResult.className = 'mt-2 p-2.5 rounded-lg text-[11px] font-mono leading-tight bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800';
+            firebaseTestResult.innerHTML = `<strong>ERROR:</strong> ${err.message}<br><span class="text-[10px] opacity-80">Tip: Check if your Firestore Rules expired in the Firebase Console.</span>`;
+            firebaseTestResult.classList.remove('hidden');
+            updateCloudStatus('error', err.message);
+        } finally {
+            firebaseTestPingBtn.disabled = false;
+            firebaseTestPingBtn.innerHTML = '<i data-lucide="activity" class="h-3.5 w-3.5 mr-1.5"></i> Run Live Connection & Speed Test';
+            if (window.lucide) lucide.createIcons();
+        }
+    });
+}
 
 // Service Reminders
 const serviceRemindersGrid = document.getElementById('service-reminders-grid');
@@ -2049,7 +2167,8 @@ if (form) {
 
         } catch (err) {
             console.error("Error saving fuel record:", err);
-            alert("Error saving record: " + err.message);
+            updateCloudStatus('error', err.message);
+            alert("Error saving fuel record: " + err.message + "\n\nTip: Click the 'Cloud Synced' status button in the top navbar to run diagnostics or check your Firestore rules.");
             submitBtn.disabled = false;
             submitBtn.textContent = originalBtnText;
         }
@@ -2236,7 +2355,8 @@ if (maintForm) {
             }
         } catch (err) {
             console.error("Error saving maintenance record:", err);
-            alert("Error saving maintenance record: " + err.message);
+            updateCloudStatus('error', err.message);
+            alert("Error saving maintenance record: " + err.message + "\n\nTip: Click the 'Cloud Synced' status button in the top navbar to run diagnostics or check your Firestore rules.");
             if (maintSubmitBtn) {
                 maintSubmitBtn.disabled = false;
                 maintSubmitBtn.textContent = origText;
@@ -2450,6 +2570,10 @@ onSnapshot(collection(db, "fuelRecords"), (snapshot) => {
     renderTable();
     renderServiceReminders();
     updateMapPanelDefaults();
+    updateCloudStatus('online');
+}, (err) => {
+    console.error("Firestore fuelRecords listener error:", err);
+    updateCloudStatus('error', err.message);
 });
 
 onSnapshot(collection(db, "maintRecords"), (snapshot) => {
@@ -2457,6 +2581,10 @@ onSnapshot(collection(db, "maintRecords"), (snapshot) => {
     syncProfilesFromRecords();
     renderMaintenanceTable();
     renderServiceReminders();
+    updateCloudStatus('online');
+}, (err) => {
+    console.error("Firestore maintRecords listener error:", err);
+    updateCloudStatus('error', err.message);
 });
 
 // ==================== INITIAL BOOTUP ====================

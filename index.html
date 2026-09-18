@@ -100,9 +100,9 @@
                     </div>
                     <div>
                         <span class="font-bold text-lg sm:text-xl text-gray-900 dark:text-white leading-none">FuelTracker</span>
-                        <div id="network-status" class="flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> Online
-                        </div>
+                        <button id="network-status" type="button" class="flex items-center text-[10px] font-medium text-emerald-600 dark:text-emerald-400 mt-0.5 hover:underline focus:outline-none transition-colors cursor-pointer" title="Click to view Firebase Status & Diagnostics">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse"></span> <span id="network-status-text">Cloud Synced</span>
+                        </button>
                     </div>
                 </div>
 
@@ -920,9 +920,78 @@
             </div>
         </div>
 
+        <!-- Firebase Diagnostics & Setup Modal -->
+        <div id="firebase-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 dark:border-slate-800 transform transition-all animate-in fade-in zoom-in-95 duration-200">
+                <div class="flex items-start justify-between pb-3 border-b border-gray-100 dark:border-slate-800">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="p-2 bg-blue-100 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400 rounded-lg">
+                            <i data-lucide="database" class="h-5 w-5"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-gray-900 dark:text-white">Firebase Cloud Database</h3>
+                            <p class="text-[11px] text-gray-500 dark:text-slate-400 font-mono">Project: fuel-tracker-c565c</p>
+                        </div>
+                    </div>
+                    <button type="button" id="firebase-modal-close-btn" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+                        <i data-lucide="x" class="h-5 w-5"></i>
+                    </button>
+                </div>
+
+                <div class="mt-4 space-y-3.5 text-xs sm:text-sm">
+                    <div class="p-3.5 bg-gray-50 dark:bg-slate-950 rounded-xl border border-gray-200/70 dark:border-slate-800">
+                        <div class="flex items-center justify-between font-semibold text-gray-800 dark:text-slate-200 mb-2">
+                            <span>Connection Health</span>
+                            <span id="firebase-diag-status" class="inline-flex items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span> Connected
+                            </span>
+                        </div>
+                        <div class="space-y-1.5 text-gray-600 dark:text-slate-400 text-xs">
+                            <div class="flex justify-between"><span>Real-time Listeners:</span> <span id="diag-listeners" class="font-medium text-emerald-600 dark:text-emerald-400">Active (2 collections)</span></div>
+                            <div class="flex justify-between"><span>Offline Cache (IndexedDB):</span> <span class="font-medium text-emerald-600 dark:text-emerald-400">Multi-tab Persistent</span></div>
+                            <div class="flex justify-between"><span>Active Profile:</span> <span id="diag-active-profile" class="font-bold text-blue-600 dark:text-blue-400">ADV 150</span></div>
+                        </div>
+                        <button type="button" id="firebase-test-ping-btn" class="mt-3 w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs flex items-center justify-center transition-colors">
+                            <i data-lucide="activity" class="h-3.5 w-3.5 mr-1.5"></i> Run Live Connection & Speed Test
+                        </button>
+                        <div id="firebase-test-result" class="hidden mt-2 p-2.5 rounded-lg text-[11px] font-mono leading-tight"></div>
+                    </div>
+
+                    <div class="p-3.5 bg-amber-50/80 dark:bg-amber-950/30 rounded-xl border border-amber-200/70 dark:border-amber-900/40 text-amber-900 dark:text-amber-200">
+                        <div class="font-bold flex items-center mb-1 text-xs text-amber-900 dark:text-amber-200">
+                            <i data-lucide="shield-check" class="h-4 w-4 mr-1.5 text-amber-600 dark:text-amber-400"></i>
+                            Firestore Security Rules (Permanent Access)
+                        </div>
+                        <p class="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                            If Firebase ever reports "Permission Denied" or logs fail to save, ensure your rules in the <a href="https://console.firebase.google.com/project/fuel-tracker-c565c/firestore/rules" target="_blank" class="underline font-bold text-amber-900 dark:text-amber-100 hover:text-amber-700">Firebase Console</a> are set to:
+                        </p>
+                        <div class="mt-2 relative">
+                            <pre id="firestore-rules-snippet" class="bg-gray-900 text-gray-100 p-2.5 rounded-lg text-[10px] font-mono overflow-x-auto select-all">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}</pre>
+                            <button type="button" id="firebase-copy-rules-btn" class="absolute top-2 right-2 bg-slate-800 hover:bg-slate-700 text-white text-[10px] px-2 py-1 rounded font-sans flex items-center shadow-xs">
+                                <i data-lucide="copy" class="h-3 w-3 mr-1"></i> Copy
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-5 flex justify-end">
+                    <button type="button" id="firebase-modal-done-btn" class="px-4 py-2 text-xs font-bold rounded-lg bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:opacity-90 transition-opacity">
+                        Done
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </main>
 
-    <script type="module" src="app.js?v=4.4"></script>
+    <script type="module" src="app.js?v=4.5"></script>
     <script>
         // Initialize Lucide icons on initial load
         lucide.createIcons();
